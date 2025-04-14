@@ -1,0 +1,15 @@
+#schedule, #priorities, #tasks {
+    width: 1fr;
+    height: 20;
+    padding: 1;
+    border: solid gray;
+    background: $surface;
+}
+
+#notes {
+    height: 1fr;
+    padding: 1;
+    border: solid gray;
+    background: $boost;
+    margin-top: 1;
+}
