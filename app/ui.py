@@ -66,7 +66,7 @@ class PlannerApp(App):
                 self.task_checkboxes[i].value = task.completed
         self.notes_area.text = self.entry.notes or ""
 
-    async def on_exit(self):
+    def save_current_entry(self):
         # Collect updated values from widgets
         priorities = [
             input.value for input in self.priority_inputs if input.value.strip()
@@ -86,6 +86,9 @@ class PlannerApp(App):
         )
 
         save_entry(updated_entry)
+
+    def on_exit(self) -> None:
+        self.save_current_entry()
 
     async def reload_entry(self):
         # Update date label
@@ -110,6 +113,8 @@ class PlannerApp(App):
 
 
     async def on_key(self, event: Key) -> None:
+        if event.key in {"left", "right"}:
+            self.save_current_entry()
         if event.key == "left":
             self.entry_date -= timedelta(days=1)
             await self.reload_entry()
