@@ -24,10 +24,8 @@ class PlannerApp(App):
         # Store references for later access
         self.schedule_area = TextArea()
         self.priority_inputs = [Input(placeholder=f"{i + 1}.") for i in range(3)]
-        self.task_checkboxes = [
-            Checkbox("Task 1"),
-            Checkbox("Task 2"),
-            Checkbox("Task 3")
+        self.task_widgets = [
+            (Checkbox(value=False), Input(placeholder=f"Task {i+1}")) for i in range(5)
         ]
         self.notes_area = TextArea()
 
@@ -40,8 +38,8 @@ class PlannerApp(App):
                 id="priorities",
             ),
             Vertical(
-                Static("✅ Tasks"),
-                *self.task_checkboxes,
+                Label("✅ Tasks", id="title-tasks"),
+                *[Horizontal(cb, inp) for cb, inp in self.task_widgets],
                 id="tasks",
             ),
         )
@@ -61,9 +59,10 @@ class PlannerApp(App):
             if i < len(self.priority_inputs):
                 self.priority_inputs[i].value = val
         for i, task in enumerate(self.entry.tasks):
-            if i < len(self.task_checkboxes):
-                self.task_checkboxes[i].label = task.text
-                self.task_checkboxes[i].value = task.completed
+            if i < len(self.task_widgets):
+                cb, inp = self.task_widgets[i]
+                cb.value = task.completed
+                inp.value = task.text
         self.notes_area.text = self.entry.notes or ""
 
     def save_current_entry(self):
@@ -72,9 +71,9 @@ class PlannerApp(App):
             input.value for input in self.priority_inputs if input.value.strip()
         ]
         tasks = [
-            Task(text=cb.label.plain, completed=cb.value)
-            for cb in self.task_checkboxes
-            if cb.label.plain.strip()
+            Task(text=inp.value, completed=cb.value)
+            for cb, inp in self.task_widgets
+            if inp.value.strip()
         ]
 
         updated_entry = PlannerEntry(
@@ -102,13 +101,15 @@ class PlannerApp(App):
         self.schedule_area.text = self.entry.schedule or ""
         for i, input_field in enumerate(self.priority_inputs):
             input_field.value = self.entry.priorities[i] if i < len(self.entry.priorities) else ""
-        for i, task in enumerate(self.entry.tasks):
-            if i < len(self.task_checkboxes):
-                self.task_checkboxes[i].label = task.text
-                self.task_checkboxes[i].value = task.completed
+        for i in range(len(self.task_widgets)):
+            cb, inp = self.task_widgets[i]
+            if i < len(self.entry.tasks):
+                task = self.entry.tasks[i]
+                cb.value = task.completed
+                inp.value = task.text
             else:
-                self.task_checkboxes[i].label = ""
-                self.task_checkboxes[i].value = False
+                cb.value = False
+                inp.value = ""
         self.notes_area.text = self.entry.notes or ""
 
 

@@ -4,6 +4,7 @@
     padding: 1;
     border: solid gray;
     background: $surface;
+    border-title-align: right;
 }
 
 #notes {
