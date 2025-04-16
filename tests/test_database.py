@@ -4,7 +4,7 @@ import tempfile
 import pytest
 from datetime import date
 from app.models import PlannerEntry, Task
-from app.database import get_connection, init_db, save_entry, load_entry
+from app.database import init_db, save_entry, load_entry
 
 
 @pytest.fixture
