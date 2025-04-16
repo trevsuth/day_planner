@@ -10,6 +10,7 @@ from database import load_entry, save_entry, init_db
 
 init_db()
 
+
 class PlannerApp(App):
     CSS_PATH = "ui.css"
 
@@ -22,12 +23,15 @@ class PlannerApp(App):
         yield Label(f"📆 {self.entry_date.strftime('%A, %B %d, %Y')}", id="date-label")
 
         # Store references for later access
-        self.schedule_area = TextArea()
-        self.priority_inputs = [Input(placeholder=f"{i + 1}.") for i in range(3)]
-        self.task_widgets = [
-            (Checkbox(value=False), Input(placeholder=f"Task {i+1}")) for i in range(5)
+        self.schedule_area = TextArea(id="section-schedule")
+        self.priority_inputs = [
+            Input(placeholder=f"{i + 1}.", id=f"priority-{i}") for i in range(3)
         ]
-        self.notes_area = TextArea()
+        self.task_widgets = [
+            (Checkbox(value=False), Input(placeholder=f"Task {i + 1}", id=f"task-{i}"))
+            for i in range(5)
+        ]
+        self.notes_area = TextArea(id="section-notes")
 
         # Top row with 3 panels
         yield Horizontal(
@@ -95,12 +99,16 @@ class PlannerApp(App):
         date_label.update(f"📆 {self.entry_date.strftime('%A, %B %d, %Y')}")
 
         # Load data
-        self.entry = load_entry(self.entry_date.isoformat()) or PlannerEntry(entry_date=self.entry_date)
+        self.entry = load_entry(self.entry_date.isoformat()) or PlannerEntry(
+            entry_date=self.entry_date
+        )
 
         # Populate widgets
         self.schedule_area.text = self.entry.schedule or ""
         for i, input_field in enumerate(self.priority_inputs):
-            input_field.value = self.entry.priorities[i] if i < len(self.entry.priorities) else ""
+            input_field.value = (
+                self.entry.priorities[i] if i < len(self.entry.priorities) else ""
+            )
         for i in range(len(self.task_widgets)):
             cb, inp = self.task_widgets[i]
             if i < len(self.entry.tasks):
@@ -112,16 +120,22 @@ class PlannerApp(App):
                 inp.value = ""
         self.notes_area.text = self.entry.notes or ""
 
-
     async def on_key(self, event: Key) -> None:
         if event.key in {"left", "right"}:
             self.save_current_entry()
-        if event.key == "left":
-            self.entry_date -= timedelta(days=1)
+            if event.key == "left":
+                self.entry_date -= timedelta(days=1)
+            elif event.key == "right":
+                self.entry_date += timedelta(days=1)
             await self.reload_entry()
-        elif event.key == "right":
-            self.entry_date += timedelta(days=1)
-            await self.reload_entry()
+        elif event.key == "ctrl+1":
+            self.query_one("#section-schedule").focus()
+        elif event.key == "ctrl+2":
+            self.query_one("#priority-0").focus()
+        elif event.key == "ctrl+3":
+            self.query_one("#task-0").focus()
+        elif event.key == "ctrl+4":
+            self.query_one("#section-notes").focus()
 
 
 if __name__ == "__main__":
