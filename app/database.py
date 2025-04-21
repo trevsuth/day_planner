@@ -1,7 +1,7 @@
 import sqlite3
 import json
 from typing import Optional
-from models import PlannerEntry, Task
+from app.models import PlannerEntry, Task
 
 
 def get_connection():
