@@ -1,0 +1,281 @@
+:root {
+  color: #1d2426;
+  background: #f4f1ea;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(180deg, rgba(244, 241, 234, 0.95), rgba(231, 236, 230, 0.95)),
+    #f4f1ea;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.app-shell {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 24px 0 32px;
+}
+
+.topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 0 18px;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #536065;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+h1 {
+  color: #172023;
+  font-size: clamp(2rem, 4vw, 4.3rem);
+  line-height: 0.98;
+}
+
+h2 {
+  color: #243034;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.date-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.icon-button,
+.save-button,
+.date-controls input {
+  min-height: 42px;
+  border: 1px solid #bbc4bd;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #1f2d31;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 42px;
+  place-items: center;
+  padding: 0;
+}
+
+.save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  background: #1e5e5a;
+  border-color: #1e5e5a;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.date-controls input {
+  width: 150px;
+  padding: 0 10px;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  gap: 8px;
+  color: #4e5b58;
+  font-size: 0.9rem;
+}
+
+.status-error {
+  color: #9f3b34;
+}
+
+.planner-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr) minmax(280px, 0.9fr);
+  grid-auto-rows: minmax(310px, auto);
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.panel {
+  display: flex;
+  min-width: 0;
+  min-height: 310px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #c6cfc9;
+  border-radius: 8px;
+  background: #fffdf8;
+  box-shadow: 0 10px 30px rgba(38, 50, 53, 0.08);
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #1e5e5a;
+}
+
+.schedule-panel {
+  grid-row: span 2;
+}
+
+.notes-panel {
+  grid-column: span 2;
+  min-height: 280px;
+}
+
+textarea,
+.priority-row input,
+.task-row input[type="text"] {
+  width: 100%;
+  border: 1px solid #d4dad4;
+  border-radius: 8px;
+  background: #fbfaf5;
+  color: #1d2426;
+  outline: none;
+}
+
+textarea:focus,
+.priority-row input:focus,
+.task-row input[type="text"]:focus,
+.date-controls input:focus,
+.icon-button:focus-visible,
+.save-button:focus-visible {
+  border-color: #2f7470;
+  box-shadow: 0 0 0 3px rgba(47, 116, 112, 0.16);
+}
+
+textarea {
+  flex: 1;
+  min-height: 220px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.priority-list,
+.task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.priority-row,
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.priority-row span {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: #d7e6df;
+  color: #1d514d;
+  font-weight: 800;
+}
+
+.priority-row input,
+.task-row input[type="text"] {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 11px;
+}
+
+.task-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: #1e5e5a;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    width: min(100% - 24px, 720px);
+    padding-top: 16px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .date-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .planner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-panel,
+  .notes-panel {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .date-controls input {
+    flex: 1 1 140px;
+  }
+
+  .save-button {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+}

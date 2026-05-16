@@ -25,13 +25,13 @@ def save_entry(entry: PlannerEntry):
     with get_connection() as conn:
         conn.execute(
             """
-        INSERT OR REPLACE INTO planner ( entry_date, priorities, tasks, schedule, notes)
+        INSERT OR REPLACE INTO planner (entry_date, priorities, tasks, schedule, notes)
         VALUES (?, ?, ?, ?, ?)
         """,
             (
                 entry.entry_date.isoformat(),
                 json.dumps(entry.priorities),
-                json.dumps([task.dict() for task in entry.tasks]),
+                json.dumps([task.model_dump() for task in entry.tasks]),
                 entry.schedule,
                 entry.notes,
             ),
@@ -48,11 +48,7 @@ def load_entry(entry_date: str) -> Optional[PlannerEntry]:
             return PlannerEntry(
                 entry_date=row[0],
                 priorities=json.loads(row[1]),
-                tasks=[
-                    # PlannerEntry.__fields__["tasks"].type_.__args[0](**task)
-                    Task(**task)
-                    for task in json.loads(row[2])
-                ],
+                tasks=[Task(**task) for task in json.loads(row[2])],
                 schedule=row[3],
                 notes=row[4],
             )

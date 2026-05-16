@@ -15,7 +15,7 @@ def temp_db(monkeypatch):
     def _get_temp_connection():
         return sqlite3.connect(path)
 
-    monkeypatch.setattr("database.get_connection", _get_temp_connection)
+    monkeypatch.setattr("app.database.get_connection", _get_temp_connection)
     init_db()
     yield
     os.remove(path)
@@ -41,4 +41,4 @@ def test_save_and_load_entry(temp_db):
     assert loaded.priorities == entry.priorities
     assert loaded.tasks == entry.tasks
     assert loaded.schedule == entry.schedule
-    assert loaded.notes - -entry.notes
+    assert loaded.notes == entry.notes

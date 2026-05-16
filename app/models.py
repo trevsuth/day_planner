@@ -1,6 +1,5 @@
 from datetime import date
-from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Task(BaseModel):
@@ -10,7 +9,7 @@ class Task(BaseModel):
 
 class PlannerEntry(BaseModel):
     entry_date: date
-    priorities: List[str] = []
-    tasks: List[Task] = []
-    schedule: Optional[str] = None
-    notes: Optional[str] = None
+    priorities: list[str] = Field(default_factory=list)
+    tasks: list[Task] = Field(default_factory=list)
+    schedule: str | None = None
+    notes: str | None = None

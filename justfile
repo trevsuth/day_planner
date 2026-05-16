@@ -1,6 +1,18 @@
 # Run the test suite
 test:
-    PYTHONPATH=app pytest 
+    pytest
+
+# Run the API server for the React frontend
+api:
+    uv run uvicorn app.api:app --reload
+
+# Run the React development server
+web:
+    npm --prefix web run dev
+
+# Build the React frontend
+web-build:
+    npm --prefix web run build
 
 # Format the code with ruff
 format:
