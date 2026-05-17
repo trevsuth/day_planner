@@ -9,7 +9,7 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Five task fields with completion checkboxes
 - Previous/next day navigation
 - Local SQLite persistence in `planner.db`
-- Textual TUI and React web interfaces backed by the same SQLite database
+- Textual TUI and React web interfaces backed by the same SQLite databases
 - Project management workspace with projects, epics, features, stories, subtasks, due dates, statuses, and deliverables
 - Card-level project hierarchy: epics contain features, features contain stories, and stories contain subtasks
 - Project cards with linked epics and quick epic creation
@@ -37,7 +37,7 @@ Open `http://127.0.0.1:5173/` in your browser. Use the top tabs to switch betwee
 To run the terminal planner instead:
 
 ```bash
-uv run python -m app_planner.ui
+just tui
 ```
 
 To see all task shortcuts:
@@ -70,7 +70,7 @@ npm --prefix web install
 Run the TUI planner:
 
 ```bash
-uv run python -m app_planner.ui
+just tui
 ```
 
 Run the web app during development:
@@ -81,7 +81,7 @@ just dev
 
 Then open the Vite URL shown in the terminal, usually `http://127.0.0.1:5173`.
 
-The TUI and web planner both create or update `planner.db` in the directory where they are run. Project management data is stored in `project_mgmt.db`.
+The TUI and web planner both create or update `planner.db` in the directory where they are run. The TUI and web project manager both create or update `project_mgmt.db`.
 
 List available task shortcuts:
 
@@ -125,6 +125,7 @@ Planner TUI shortcuts:
 
 | Key | Action |
 | --- | --- |
+| `F2` | Switch to project management |
 | `Left Arrow` | Save the current day and move to the previous day |
 | `Right Arrow` | Save the current day and move to the next day |
 | `Ctrl+1` | Focus the schedule section |
@@ -132,7 +133,22 @@ Planner TUI shortcuts:
 | `Ctrl+3` | Focus the first task field |
 | `Ctrl+4` | Focus the notes section |
 
+`Ctrl+M` is also supported as an alternate project-management shortcut, but `F2` is more reliable across terminal emulators.
+
 Entries are saved when changing days and when the app exits.
+
+Project manager TUI shortcuts:
+
+| Key | Action |
+| --- | --- |
+| `F1` | Switch to planner |
+| `F5` | Create a project from the project name and description fields |
+| `F6` | Add a backlog epic to the selected project |
+| `F7` | Add the next child type to the selected card |
+| `PageUp` / `PageDown` | Select the previous or next project |
+| `F8` / `F9` | Select the previous or next card |
+
+The previous `Ctrl+P`, `Ctrl+N`, `Ctrl+E`, `Ctrl+A`, `Ctrl+Up` / `Ctrl+Down`, and `Ctrl+K` / `Ctrl+J` shortcuts remain available as alternates. In the TUI project view, select an epic and press `F7` to add a feature, select a feature and press `F7` to add a story, or select a story and press `F7` to add a subtask. Deliverables can be entered as a comma-separated list before adding a card.
 
 Project manager web shortcuts:
 
@@ -203,6 +219,7 @@ Available `just` recipes:
 | `just dev` | Run the API and React development servers together |
 | `just api` | Run the FastAPI development server |
 | `just web` | Run the React development server |
+| `just tui` | Run the terminal planner |
 | `just web-build` | Build the React frontend |
 | `just format` | Format Python code with Ruff |
 | `just lint` | Lint and fix Python code with Ruff |

@@ -6,11 +6,39 @@ from typing import Optional
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, Container
 from textual.widgets import Label, Static, Input, TextArea, Checkbox
-from textual.events import Key
 from app_planner.models import PlannerEntry, Task
 from app_planner.database import load_entry, save_entry, init_db
+from app_projmgmt.database import (
+    create_card,
+    create_project,
+    init_db as init_project_db,
+    list_cards,
+    list_projects,
+)
+from app_projmgmt.models import (
+    CardStatus,
+    CardType,
+    Project,
+    ProjectCardCreate,
+    ProjectCreate,
+)
 
 init_db()
+init_project_db()
+
+
+CARD_TYPE_LABELS = {
+    CardType.EPIC: "Epic",
+    CardType.FEATURE: "Feature",
+    CardType.STORY: "Story",
+    CardType.SUBTASK: "Subtask",
+}
+
+CHILD_TYPE_BY_CARD_TYPE = {
+    CardType.EPIC: CardType.FEATURE,
+    CardType.FEATURE: CardType.STORY,
+    CardType.STORY: CardType.SUBTASK,
+}
 
 
 def get_css_path() -> str:
@@ -24,16 +52,50 @@ def get_css_path() -> str:
 
 class PlannerApp(App):
     CSS_PATH = get_css_path()
+    BINDINGS = [
+        ("f2", "show_projects", "Projects"),
+        ("ctrl+m", "show_projects", "Projects"),
+        ("f1", "show_planner", "Planner"),
+        ("ctrl+p", "show_planner", "Planner"),
+        ("left", "previous_day", "Previous day"),
+        ("right", "next_day", "Next day"),
+        ("ctrl+1", "focus_schedule", "Schedule"),
+        ("ctrl+2", "focus_priorities", "Priorities"),
+        ("ctrl+3", "focus_tasks", "Tasks"),
+        ("ctrl+4", "focus_notes", "Notes"),
+        ("f5", "create_project", "Create project"),
+        ("ctrl+n", "create_project", "Create project"),
+        ("f6", "create_epic", "Create epic"),
+        ("ctrl+e", "create_epic", "Create epic"),
+        ("f7", "create_child", "Create child"),
+        ("ctrl+a", "create_child", "Create child"),
+        ("pageup", "previous_project", "Previous project"),
+        ("ctrl+up", "previous_project", "Previous project"),
+        ("pagedown", "next_project", "Next project"),
+        ("ctrl+down", "next_project", "Next project"),
+        ("f9", "next_card", "Next card"),
+        ("ctrl+j", "next_card", "Next card"),
+        ("f8", "previous_card", "Previous card"),
+        ("ctrl+k", "previous_card", "Previous card"),
+    ]
 
     def __init__(self):
         super().__init__()
         self.entry_date = date.today()
         self.entry: Optional[PlannerEntry] = None
+        self.active_view = "planner"
+        self.projects: list[Project] = []
+        self.project_index = 0
+        self.project_cards = []
+        self.card_index = 0
 
     def compose(self) -> ComposeResult:
-        yield Label(f"📆 {self.entry_date.strftime('%A, %B %d, %Y')}", id="date-label")
+        yield Label("", id="mode-label")
 
         # Store references for later access
+        self.date_label = Label(
+            f"DATE: {self.entry_date.strftime('%A, %B %d, %Y')}", id="date-label"
+        )
         self.schedule_area = TextArea(id="section-schedule")
         self.priority_inputs = [
             Input(placeholder=f"{i + 1}.", id=f"priority-{i}") for i in range(3)
@@ -44,25 +106,64 @@ class PlannerApp(App):
         ]
         self.notes_area = TextArea(id="section-notes")
 
-        # Top row with 3 panels
-        yield Horizontal(
-            Vertical(Static("📅 Schedule"), self.schedule_area, id="schedule"),
-            Vertical(
-                Static("⭐ Daily Priorities"),
-                *self.priority_inputs,
-                id="priorities",
-            ),
-            Vertical(
-                Label("✅ Tasks", id="title-tasks"),
-                *[Horizontal(cb, inp) for cb, inp in self.task_widgets],
-                id="tasks",
-            ),
+        self.project_list = Static("", id="project-list")
+        self.card_list = Static("", id="project-card-list")
+        self.project_name_input = Input(
+            placeholder="Project name (F5 to create)", id="project-name"
+        )
+        self.project_description_area = TextArea(id="project-description")
+        self.epic_input = Input(placeholder="New epic title (F6)", id="epic-title")
+        self.child_input = Input(
+            placeholder="New child title for selected card (F7)", id="child-title"
+        )
+        self.deliverables_input = Input(
+            placeholder="Deliverables, comma separated", id="card-deliverables"
         )
 
-        # Notes section
-        yield Container(Static("📝 Notes"), self.notes_area, id="notes")
+        yield Container(
+            self.date_label,
+            Horizontal(
+                Vertical(Static("[ SCHEDULE ]"), self.schedule_area, id="schedule"),
+                Vertical(
+                    Static("[ PRIORITIES ]"),
+                    *self.priority_inputs,
+                    id="priorities",
+                ),
+                Vertical(
+                    Label("[ TASKS ]", id="title-tasks"),
+                    *[Horizontal(cb, inp) for cb, inp in self.task_widgets],
+                    id="tasks",
+                ),
+            ),
+            Container(Static("[ NOTES ]"), self.notes_area, id="notes"),
+            id="planner-view",
+        )
+
+        yield Container(
+            Horizontal(
+                Vertical(
+                    Static("Projects"),
+                    self.project_list,
+                    Static("New Project"),
+                    self.project_name_input,
+                    self.project_description_area,
+                    id="project-panel",
+                ),
+                Vertical(
+                    Static("Cards"),
+                    self.card_list,
+                    Static("Add Cards"),
+                    self.epic_input,
+                    self.child_input,
+                    self.deliverables_input,
+                    id="card-panel",
+                ),
+            ),
+            id="projects-view",
+        )
 
     async def on_mount(self):
+        await self.show_planner_view()
         # Load entry from the database
         self.entry = load_entry(self.entry_date.isoformat()) or PlannerEntry(
             entry_date=self.entry_date
@@ -79,6 +180,7 @@ class PlannerApp(App):
                 cb.value = task.completed
                 inp.value = task.text
         self.notes_area.text = self.entry.notes or ""
+        await self.reload_projects()
 
     def save_current_entry(self):
         # Collect updated values from widgets
@@ -102,12 +204,178 @@ class PlannerApp(App):
         save_entry(updated_entry)
 
     def on_exit(self) -> None:
+        if self.active_view == "planner":
+            self.save_current_entry()
+
+    async def show_planner_view(self):
+        self.active_view = "planner"
+        self.query_one("#planner-view").display = True
+        self.query_one("#projects-view").display = False
+        self.query_one("#mode-label", Label).update(
+            "Planner | F2 Projects | Left/Right Day | Ctrl+1..4 Focus"
+        )
+
+    async def show_projects_view(self):
         self.save_current_entry()
+        self.active_view = "projects"
+        self.query_one("#planner-view").display = False
+        self.query_one("#projects-view").display = True
+        self.query_one("#mode-label", Label).update(
+            "Projects | F1 Planner | F5 Project | F6 Epic | F7 Child | PgUp/PgDn Project | F8/F9 Card"
+        )
+        await self.reload_projects()
+
+    async def reload_projects(self):
+        self.projects = list_projects()
+        if self.project_index >= len(self.projects):
+            self.project_index = max(len(self.projects) - 1, 0)
+        await self.reload_project_cards()
+        self.render_project_lists()
+
+    async def reload_project_cards(self):
+        project = self.selected_project
+        self.project_cards = list_cards(project.id) if project else []
+        if self.card_index >= len(self.project_cards):
+            self.card_index = max(len(self.project_cards) - 1, 0)
+
+    @property
+    def selected_project(self) -> Project | None:
+        if not self.projects:
+            return None
+        return self.projects[self.project_index]
+
+    @property
+    def selected_card(self):
+        if not self.project_cards:
+            return None
+        return self.project_cards[self.card_index]
+
+    def render_project_lists(self):
+        if not self.projects:
+            self.project_list.update("No projects yet. Enter a name and press F5.")
+            self.card_list.update("Create a project before adding cards.")
+            return
+
+        project_lines = []
+        for index, project in enumerate(self.projects):
+            marker = ">" if index == self.project_index else " "
+            description = f" — {project.description}" if project.description else ""
+            project_lines.append(f"{marker} {project.name}{description}")
+        self.project_list.update("\n".join(project_lines))
+
+        project = self.selected_project
+        if not self.project_cards:
+            self.card_list.update(f"{project.name}\nNo cards yet. Add an epic with F6.")
+            return
+
+        card_lines = [f"{project.name}"]
+        for index, card in enumerate(self.project_cards):
+            marker = ">" if index == self.card_index else " "
+            parent = self.card_parent_label(card)
+            deliverables = (
+                f" | deliverables: {', '.join(card.deliverables)}"
+                if card.deliverables
+                else ""
+            )
+            card_lines.append(
+                f"{marker} [{CARD_TYPE_LABELS[card.card_type]}] {card.title}"
+                f" | {card.status.value.replace('_', ' ')} | parent: {parent}{deliverables}"
+            )
+        self.card_list.update("\n".join(card_lines))
+
+    def card_parent_label(self, card) -> str:
+        if not card.parent_id:
+            return "Project"
+        parent = next(
+            (
+                candidate
+                for candidate in self.project_cards
+                if candidate.id == card.parent_id
+            ),
+            None,
+        )
+        return parent.title if parent else "Unknown"
+
+    async def create_project_from_form(self):
+        name = self.project_name_input.value.strip()
+        if not name:
+            return
+
+        description = self.project_description_area.text.strip() or None
+        create_project(ProjectCreate(name=name, description=description))
+        self.project_name_input.value = ""
+        self.project_description_area.text = ""
+        self.project_index = 0
+        await self.reload_projects()
+
+    async def create_epic_from_form(self):
+        project = self.selected_project
+        title = self.epic_input.value.strip()
+        if not project or not title:
+            return
+
+        create_card(
+            ProjectCardCreate(
+                project_id=project.id,
+                card_type=CardType.EPIC,
+                title=title,
+                status=CardStatus.BACKLOG,
+                deliverables=self.deliverables_from_form(),
+            )
+        )
+        self.epic_input.value = ""
+        self.deliverables_input.value = ""
+        await self.reload_projects()
+
+    async def create_child_from_form(self):
+        parent = self.selected_card
+        title = self.child_input.value.strip()
+        if not parent or not title:
+            return
+
+        child_type = CHILD_TYPE_BY_CARD_TYPE.get(parent.card_type)
+        if not child_type:
+            return
+
+        create_card(
+            ProjectCardCreate(
+                project_id=parent.project_id,
+                card_type=child_type,
+                title=title,
+                status=parent.status,
+                parent_id=parent.id,
+                deliverables=self.deliverables_from_form(),
+            )
+        )
+        self.child_input.value = ""
+        self.deliverables_input.value = ""
+        await self.reload_projects()
+
+    def deliverables_from_form(self) -> list[str]:
+        return [
+            deliverable.strip()
+            for deliverable in self.deliverables_input.value.split(",")
+            if deliverable.strip()
+        ]
+
+    async def select_adjacent_project(self, direction: int):
+        if not self.projects:
+            return
+        self.project_index = (self.project_index + direction) % len(self.projects)
+        self.card_index = 0
+        await self.reload_project_cards()
+        self.render_project_lists()
+
+    def select_adjacent_card(self, direction: int):
+        if not self.project_cards:
+            return
+        self.card_index = (self.card_index + direction) % len(self.project_cards)
+        self.render_project_lists()
 
     async def reload_entry(self):
         # Update date label
         date_label = self.query_one("#date-label", Label)
-        date_label.update(f"📆 {self.entry_date.strftime('%A, %B %d, %Y')}")
+        date_label.update(f"DATE: {self.entry_date.strftime('%A, %B %d, %Y')}")
 
         # Load data
         self.entry = load_entry(self.entry_date.isoformat()) or PlannerEntry(
@@ -131,7 +399,94 @@ class PlannerApp(App):
                 inp.value = ""
         self.notes_area.text = self.entry.notes or ""
 
-    async def on_key(self, event: Key) -> None:
+    async def action_show_planner(self) -> None:
+        await self.show_planner_view()
+
+    async def action_show_projects(self) -> None:
+        await self.show_projects_view()
+
+    async def action_previous_day(self) -> None:
+        if self.active_view == "planner":
+            self.save_current_entry()
+            self.entry_date -= timedelta(days=1)
+            await self.reload_entry()
+
+    async def action_next_day(self) -> None:
+        if self.active_view == "planner":
+            self.save_current_entry()
+            self.entry_date += timedelta(days=1)
+            await self.reload_entry()
+
+    def action_focus_schedule(self) -> None:
+        if self.active_view == "planner":
+            self.query_one("#section-schedule").focus()
+
+    def action_focus_priorities(self) -> None:
+        if self.active_view == "planner":
+            self.query_one("#priority-0").focus()
+
+    def action_focus_tasks(self) -> None:
+        if self.active_view == "planner":
+            self.query_one("#task-0").focus()
+
+    def action_focus_notes(self) -> None:
+        if self.active_view == "planner":
+            self.query_one("#section-notes").focus()
+
+    async def action_create_project(self) -> None:
+        if self.active_view == "projects":
+            await self.create_project_from_form()
+
+    async def action_create_epic(self) -> None:
+        if self.active_view == "projects":
+            await self.create_epic_from_form()
+
+    async def action_create_child(self) -> None:
+        if self.active_view == "projects":
+            await self.create_child_from_form()
+
+    async def action_previous_project(self) -> None:
+        if self.active_view == "projects":
+            await self.select_adjacent_project(-1)
+
+    async def action_next_project(self) -> None:
+        if self.active_view == "projects":
+            await self.select_adjacent_project(1)
+
+    def action_next_card(self) -> None:
+        if self.active_view == "projects":
+            self.select_adjacent_card(1)
+
+    def action_previous_card(self) -> None:
+        if self.active_view == "projects":
+            self.select_adjacent_card(-1)
+
+    async def on_key(self, event) -> None:
+        # Fallback for terminals that report uncommon binding names.
+        if event.key in {"f1", "ctrl+p", "ctrl_p"}:
+            await self.show_planner_view()
+            return
+        if event.key in {"f2", "ctrl+m", "ctrl_m"}:
+            await self.show_projects_view()
+            return
+
+        if self.active_view == "projects":
+            if event.key in {"f5", "ctrl+n", "ctrl_n"}:
+                await self.create_project_from_form()
+            elif event.key in {"f6", "ctrl+e", "ctrl_e"}:
+                await self.create_epic_from_form()
+            elif event.key in {"f7", "ctrl+a", "ctrl_a"}:
+                await self.create_child_from_form()
+            elif event.key in {"pageup", "ctrl+up", "ctrl_up"}:
+                await self.select_adjacent_project(-1)
+            elif event.key in {"pagedown", "ctrl+down", "ctrl_down"}:
+                await self.select_adjacent_project(1)
+            elif event.key in {"f9", "ctrl+j", "ctrl_j"}:
+                self.select_adjacent_card(1)
+            elif event.key in {"f8", "ctrl+k", "ctrl_k"}:
+                self.select_adjacent_card(-1)
+            return
+
         if event.key in {"left", "right"}:
             self.save_current_entry()
             if event.key == "left":
@@ -139,13 +494,13 @@ class PlannerApp(App):
             elif event.key == "right":
                 self.entry_date += timedelta(days=1)
             await self.reload_entry()
-        elif event.key == "ctrl+1":
+        elif event.key in {"ctrl+1", "ctrl_1"}:
             self.query_one("#section-schedule").focus()
-        elif event.key == "ctrl+2":
+        elif event.key in {"ctrl+2", "ctrl_2"}:
             self.query_one("#priority-0").focus()
-        elif event.key == "ctrl+3":
+        elif event.key in {"ctrl+3", "ctrl_3"}:
             self.query_one("#task-0").focus()
-        elif event.key == "ctrl+4":
+        elif event.key in {"ctrl+4", "ctrl_4"}:
             self.query_one("#section-notes").focus()
 
 

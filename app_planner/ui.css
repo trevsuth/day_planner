@@ -1,16 +1,120 @@
-#schedule, #priorities, #tasks {
+Screen {
+    background: black;
+    color: #7cff7c;
+}
+
+Label,
+Static {
+    background: black;
+    color: #7cff7c;
+}
+
+Input {
+    height: 3;
+    background: black;
+    color: #d8ffd8;
+    border: ascii #6fdc6f;
+}
+
+Input:focus {
+    border: ascii #ffffff;
+    color: #ffffff;
+}
+
+TextArea {
+    background: black;
+    color: #d8ffd8;
+    border: none;
+}
+
+TextArea:focus {
+    background: #001800;
+    color: #ffffff;
+}
+
+Checkbox {
+    background: black;
+    color: #d8ffd8;
+}
+
+#mode-label {
+    height: 1;
+    background: #003000;
+    color: #ffffff;
+    text-style: bold reverse;
+}
+
+#date-label {
+    height: 1;
+    color: #ffffff;
+    text-style: bold;
+}
+
+#planner-view,
+#projects-view {
+    height: 1fr;
+    background: black;
+}
+
+#schedule,
+#priorities,
+#tasks {
     width: 1fr;
     height: 20;
-    padding: 1;
-    border: solid gray;
-    background: $surface;
-    border-title-align: right;
+    padding: 0 1;
+    border: ascii #6fdc6f;
+    background: black;
 }
 
 #notes {
     height: 1fr;
-    padding: 1;
-    border: solid gray;
-    background: $boost;
+    padding: 0 1;
+    border: ascii #6fdc6f;
+    background: black;
     margin-top: 0;
+}
+
+#project-panel {
+    width: 1fr;
+    height: 1fr;
+    padding: 0 1;
+    border: ascii #6fdc6f;
+    background: black;
+}
+
+#card-panel {
+    width: 2fr;
+    height: 1fr;
+    padding: 0 1;
+    border: ascii #6fdc6f;
+    background: black;
+}
+
+#project-list,
+#project-card-list {
+    padding: 0 1;
+    border: ascii #6fdc6f;
+    background: black;
+    color: #d8ffd8;
+}
+
+#project-list {
+    height: 10;
+}
+
+#project-card-list {
+    height: 1fr;
+}
+
+#project-name,
+#epic-title,
+#child-title,
+#card-deliverables {
+    margin-top: 1;
+}
+
+#project-description {
+    height: 6;
+    margin-top: 1;
+    border: ascii #6fdc6f;
 }

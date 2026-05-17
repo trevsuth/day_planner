@@ -14,6 +14,10 @@ api:
 web:
     npm --prefix web run dev
 
+# Run the terminal planner
+tui:
+    uv run python -m app_planner.ui
+
 # Run the API and React development servers together
 dev:
     #!/usr/bin/env bash
