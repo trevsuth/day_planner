@@ -51,7 +51,9 @@ class ProjectCard(BaseModel):
     card_type: CardType
     title: str
     description: str | None = None
+    comments: str | None = None
     status: CardStatus = CardStatus.BACKLOG
+    start_date: date | None = None
     due_date: date | None = None
     parent_id: str | None = None
     deliverables: list[str] = Field(default_factory=list)
@@ -64,7 +66,9 @@ class ProjectCardCreate(BaseModel):
     card_type: CardType
     title: str
     description: str | None = None
+    comments: str | None = None
     status: CardStatus = CardStatus.BACKLOG
+    start_date: date | None = None
     due_date: date | None = None
     parent_id: str | None = None
     deliverables: list[str] = Field(default_factory=list)
@@ -74,7 +78,9 @@ class ProjectCardUpdate(BaseModel):
     card_type: CardType
     title: str
     description: str | None = None
+    comments: str | None = None
     status: CardStatus = CardStatus.BACKLOG
+    start_date: date | None = None
     due_date: date | None = None
     parent_id: str | None = None
     deliverables: list[str] = Field(default_factory=list)

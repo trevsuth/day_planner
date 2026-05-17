@@ -767,6 +767,170 @@ textarea {
   text-transform: uppercase;
 }
 
+.timeline-list,
+.gantt-chart {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-row,
+.gantt-row,
+.calendar-card {
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 32%),
+    rgba(7, 16, 22, 0.78);
+  color: var(--text);
+  text-align: left;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 110px 70px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 50px;
+  padding: 9px 12px;
+}
+
+.timeline-row time,
+.gantt-axis,
+.calendar-day time {
+  color: var(--line-strong);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.timeline-kind {
+  width: fit-content;
+  padding: 3px 7px;
+  border: 1px solid rgba(123, 216, 143, 0.5);
+  color: var(--green);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.timeline-kind.due {
+  border-color: rgba(255, 184, 92, 0.55);
+  color: var(--amber);
+}
+
+.gantt-axis {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 10px;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.32fr) minmax(260px, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  padding: 10px;
+}
+
+.gantt-row > div:first-child {
+  display: grid;
+  gap: 6px;
+}
+
+.gantt-track {
+  position: relative;
+  height: 30px;
+  border: 1px solid rgba(91, 210, 234, 0.2);
+  background:
+    repeating-linear-gradient(90deg, rgba(91, 210, 234, 0.1) 0 1px, transparent 1px 10%),
+    rgba(3, 10, 14, 0.74);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 5px;
+  display: block;
+  min-width: 34px;
+  height: 18px;
+  overflow: hidden;
+  padding: 2px 7px;
+  background: var(--line-strong);
+  color: #051016;
+  font-size: 0.68rem;
+  font-weight: 900;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+.gantt-bar.backlog {
+  background: var(--muted);
+}
+
+.gantt-bar.in_progress {
+  background: var(--line-strong);
+}
+
+.gantt-bar.blocked {
+  background: var(--danger);
+}
+
+.gantt-bar.done {
+  background: var(--green);
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(110px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+}
+
+.calendar-heading {
+  color: var(--line-strong);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.calendar-day {
+  display: grid;
+  min-height: 118px;
+  align-content: start;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(91, 210, 234, 0.2);
+  background: rgba(7, 16, 22, 0.7);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.calendar-day.muted {
+  opacity: 0.45;
+}
+
+.calendar-card {
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+}
+
+.calendar-card span {
+  color: var(--amber);
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.calendar-card strong {
+  overflow: hidden;
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .board-column {
   display: flex;
   min-width: 198px;
@@ -777,6 +941,16 @@ textarea {
   background:
     linear-gradient(180deg, rgba(91, 210, 234, 0.06), transparent 90px),
     rgba(7, 16, 22, 0.78);
+}
+
+.board-column.drag-over {
+  border-color: var(--green);
+  background:
+    linear-gradient(180deg, rgba(123, 216, 143, 0.12), transparent 120px),
+    rgba(10, 28, 20, 0.82);
+  box-shadow:
+    0 16px 34px var(--shadow),
+    inset 0 0 0 2px rgba(123, 216, 143, 0.32);
 }
 
 .board-column > header,
@@ -805,6 +979,11 @@ textarea {
   gap: 8px;
   padding: 12px;
   color: var(--text);
+  cursor: grab;
+}
+
+.project-card:active {
+  cursor: grabbing;
 }
 
 .project-card:hover,
@@ -973,6 +1152,98 @@ textarea {
   gap: 10px;
 }
 
+.comments-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
+  gap: 12px;
+}
+
+.comments-editor textarea {
+  min-height: 180px;
+}
+
+.markdown-preview {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 180px;
+  padding: 12px;
+  border: 1px solid rgba(91, 210, 234, 0.24);
+  background: rgba(3, 10, 14, 0.64);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.markdown-preview header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--line-strong);
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview p,
+.markdown-preview ul {
+  margin: 0;
+}
+
+.markdown-preview h1 {
+  font-size: 1.25rem;
+}
+
+.markdown-preview h2 {
+  font-size: 1.05rem;
+}
+
+.markdown-preview h3 {
+  font-size: 0.92rem;
+}
+
+.markdown-preview p,
+.markdown-preview li {
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.markdown-preview code {
+  padding: 1px 5px;
+  background: rgba(91, 210, 234, 0.12);
+  color: var(--line-strong);
+}
+
+.markdown-preview pre,
+.mermaid-preview {
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid rgba(91, 210, 234, 0.22);
+  background: rgba(1, 6, 9, 0.82);
+  color: var(--text);
+}
+
+.mermaid-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.mermaid-preview span {
+  width: fit-content;
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 184, 92, 0.55);
+  color: var(--amber);
+  font-size: 0.7rem;
+  font-weight: 900;
+}
+
+.mermaid-preview pre {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .deliverables-editor h3 {
   margin: 0;
 }
@@ -1021,8 +1292,14 @@ textarea {
   }
 
   .roadmap-card,
-  .risk-row {
+  .risk-row,
+  .timeline-row,
+  .gantt-row {
     grid-template-columns: 1fr;
+  }
+
+  .calendar-grid {
+    grid-template-columns: repeat(7, minmax(140px, 1fr));
   }
 
   .roadmap-feature,
@@ -1066,6 +1343,7 @@ textarea {
   .relationship-panel,
   .inline-child-creator,
   .linked-card,
+  .comments-editor,
   .overview-summary-grid {
     grid-template-columns: 1fr;
   }

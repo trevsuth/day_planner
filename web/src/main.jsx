@@ -117,11 +117,138 @@ function emptyCard(projectId) {
     card_type: "epic",
     title: "",
     description: "",
+    comments: "",
     status: "backlog",
+    start_date: "",
     due_date: "",
     parent_id: "",
     deliverables: [""],
   };
+}
+
+function cardStart(card) {
+  return card.start_date || card.due_date || "";
+}
+
+function cardEnd(card) {
+  return card.due_date || card.start_date || "";
+}
+
+function daysBetween(start, end) {
+  const startDate = parseLocalDate(start);
+  const endDate = parseLocalDate(end);
+  return Math.round((endDate - startDate) / 86400000);
+}
+
+function getScheduledCards(cards) {
+  return cards.filter((card) => card.start_date || card.due_date);
+}
+
+function getScheduleBounds(cards) {
+  const scheduled = getScheduledCards(cards);
+  if (!scheduled.length) {
+    const today = formatDateInput(new Date());
+    return { start: today, end: addDays(today, 30) };
+  }
+
+  const starts = scheduled.map(cardStart).filter(Boolean).sort();
+  const ends = scheduled.map(cardEnd).filter(Boolean).sort();
+  const start = starts[0];
+  const end = ends[ends.length - 1];
+  return { start, end: end < start ? start : end };
+}
+
+function getTimelinePoints(cards) {
+  return getScheduledCards(cards)
+    .flatMap((card) => [
+      card.start_date ? { date: card.start_date, kind: "Start", card } : null,
+      card.due_date ? { date: card.due_date, kind: "Due", card } : null,
+    ])
+    .filter(Boolean)
+    .sort((first, second) => first.date.localeCompare(second.date) || first.card.title.localeCompare(second.card.title));
+}
+
+function escapeHtml(value) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function inlineMarkdown(value) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+}
+
+function markdownToHtml(value = "") {
+  const lines = value.split("\n");
+  const html = [];
+  let listItems = [];
+  let codeFence = null;
+  let codeLines = [];
+
+  function flushList() {
+    if (!listItems.length) return;
+    html.push(`<ul>${listItems.map((item) => `<li>${inlineMarkdown(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  }
+
+  function flushCode() {
+    const escapedCode = escapeHtml(codeLines.join("\n"));
+    if (codeFence === "mermaid" || codeFence === "mmd") {
+      html.push(`<div class="mermaid-preview"><span>${codeFence.toUpperCase()}</span><pre>${escapedCode}</pre></div>`);
+    } else {
+      html.push(`<pre><code>${escapedCode}</code></pre>`);
+    }
+    codeFence = null;
+    codeLines = [];
+  }
+
+  for (const line of lines) {
+    const fenceMatch = line.match(/^```(\w+)?\s*$/);
+    if (fenceMatch && codeFence) {
+      flushCode();
+      continue;
+    }
+    if (fenceMatch) {
+      flushList();
+      codeFence = (fenceMatch[1] || "text").toLowerCase();
+      continue;
+    }
+    if (codeFence) {
+      codeLines.push(line);
+      continue;
+    }
+
+    if (!line.trim()) {
+      flushList();
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      flushList();
+      html.push(`<h${headingMatch[1].length}>${inlineMarkdown(headingMatch[2])}</h${headingMatch[1].length}>`);
+      continue;
+    }
+
+    const listMatch = line.match(/^[-*]\s+(.+)$/);
+    if (listMatch) {
+      listItems.push(listMatch[1]);
+      continue;
+    }
+
+    flushList();
+    html.push(`<p>${inlineMarkdown(line)}</p>`);
+  }
+
+  flushList();
+  if (codeFence) flushCode();
+  return html.join("");
 }
 
 function cardRelationshipLabel(card, cards) {
@@ -659,7 +786,9 @@ function ProjectsApp() {
           card_type: childType,
           title: title.trim(),
           description: null,
+          comments: null,
           status: parent?.status || "backlog",
+          start_date: null,
           due_date: null,
           parent_id: parent?.id || null,
           deliverables: [],
@@ -681,12 +810,18 @@ function ProjectsApp() {
 
   async function saveSelectedCard() {
     if (!selectedCard?.title.trim()) return;
+    if (selectedCard.start_date && selectedCard.due_date && selectedCard.start_date > selectedCard.due_date) {
+      setError("Start date must be on or before due date.");
+      return;
+    }
 
     const payload = {
       card_type: selectedCard.card_type,
       title: selectedCard.title.trim(),
       description: selectedCard.description?.trim() || null,
+      comments: selectedCard.comments?.trim() || null,
       status: selectedCard.status,
+      start_date: selectedCard.start_date || null,
       due_date: selectedCard.due_date || null,
       parent_id: selectedCard.parent_id || null,
       deliverables: selectedCard.deliverables.map((item) => item.trim()).filter(Boolean),
@@ -754,6 +889,38 @@ function ProjectsApp() {
     }
   }
 
+  async function moveCardToStatus(card, nextStatus) {
+    if (!card || card.status === nextStatus) return;
+
+    const payload = {
+      card_type: card.card_type,
+      title: card.title,
+      description: card.description || null,
+      comments: card.comments || null,
+      status: nextStatus,
+      start_date: card.start_date || null,
+      due_date: card.due_date || null,
+      parent_id: card.parent_id || null,
+      deliverables: card.deliverables || [],
+    };
+
+    try {
+      const saved = await request(`/api/projmgmt/cards/${card.id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      });
+      setCards((current) => current.map((item) => (item.id === saved.id ? saved : item)));
+      setProjectCardsById((current) => ({
+        ...current,
+        [saved.project_id]: (current[saved.project_id] || []).map((item) => (item.id === saved.id ? saved : item)),
+      }));
+      setError("");
+      setStatus(`Moved to ${statusLabels[nextStatus]}`);
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   return (
     <>
       <header className="topbar projects-topbar">
@@ -784,6 +951,18 @@ function ProjectsApp() {
         <button className={projectView === "roadmap" ? "active" : ""} type="button" onClick={() => setProjectView("roadmap")}>
           <Map size={17} />
           <span>Roadmap</span>
+        </button>
+        <button className={projectView === "timeline" ? "active" : ""} type="button" onClick={() => setProjectView("timeline")}>
+          <CalendarDays size={17} />
+          <span>Timeline</span>
+        </button>
+        <button className={projectView === "gantt" ? "active" : ""} type="button" onClick={() => setProjectView("gantt")}>
+          <BarChart3 size={17} />
+          <span>Gantt</span>
+        </button>
+        <button className={projectView === "calendar" ? "active" : ""} type="button" onClick={() => setProjectView("calendar")}>
+          <CalendarDays size={17} />
+          <span>Calendar</span>
         </button>
         <button className={projectView === "board" ? "active" : ""} type="button" onClick={() => setProjectView("board")}>
           <FolderKanban size={17} />
@@ -851,7 +1030,24 @@ function ProjectsApp() {
         ) : null}
 
         {projectView === "board" ? (
-          <ProjectBoard cards={cards} onOpenCard={setSelectedCard} onStartNewCard={startNewCard} />
+          <ProjectBoard
+            cards={cards}
+            onMoveCard={moveCardToStatus}
+            onOpenCard={setSelectedCard}
+            onStartNewCard={startNewCard}
+          />
+        ) : null}
+
+        {projectView === "timeline" ? (
+          <ProjectTimeline cards={cards} onOpenCard={setSelectedCard} project={activeProject} />
+        ) : null}
+
+        {projectView === "gantt" ? (
+          <ProjectGantt cards={cards} onOpenCard={setSelectedCard} project={activeProject} />
+        ) : null}
+
+        {projectView === "calendar" ? (
+          <ProjectCalendar cards={cards} onOpenCard={setSelectedCard} project={activeProject} />
         ) : null}
       </div>
 
@@ -886,11 +1082,30 @@ function ProjectsApp() {
   );
 }
 
-function ProjectBoard({ cards, onOpenCard, onStartNewCard }) {
+function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard }) {
+  const [dragOverStatus, setDragOverStatus] = useState("");
+
+  function dropCard(event, statusValue) {
+    event.preventDefault();
+    const cardId = event.dataTransfer.getData("text/plain");
+    const card = cards.find((candidate) => candidate.id === cardId);
+    setDragOverStatus("");
+    onMoveCard(card, statusValue);
+  }
+
   return (
     <section className="project-board">
       {STATUSES.map((statusValue) => (
-        <div className="board-column" key={statusValue}>
+        <div
+          className={dragOverStatus === statusValue ? "board-column drag-over" : "board-column"}
+          key={statusValue}
+          onDragLeave={() => setDragOverStatus((current) => (current === statusValue ? "" : current))}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragOverStatus(statusValue);
+          }}
+          onDrop={(event) => dropCard(event, statusValue)}
+        >
           <header>
             <h2>{statusLabels[statusValue]}</h2>
             <IconButton label={`Add ${statusLabels[statusValue]} card`} onClick={() => onStartNewCard("epic", statusValue)}>
@@ -912,12 +1127,22 @@ function ProjectBoard({ cards, onOpenCard, onStartNewCard }) {
 
 function ProjectCardButton({ card, cards, onOpenCard }) {
   return (
-    <button className="project-card" type="button" onClick={() => onOpenCard(card)}>
+    <button
+      className="project-card"
+      draggable
+      type="button"
+      onClick={() => onOpenCard(card)}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", card.id);
+      }}
+    >
       <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
       <strong>{card.title}</strong>
       {card.description ? <p>{card.description}</p> : null}
       <span className="relationship-label">{cardRelationshipLabel(card, cards)}</span>
       <footer>
+        {card.start_date ? <span>Start {card.start_date}</span> : null}
         {card.due_date ? <span>Due {card.due_date}</span> : <span>No due date</span>}
         <span>{card.deliverables.length} deliverables</span>
       </footer>
@@ -1092,6 +1317,7 @@ function RoadmapFeature({ cards, feature, onOpenCard }) {
                 <strong>{story.title}</strong>
                 <footer>
                   <span>{statusLabels[story.status]}</span>
+                  {story.start_date ? <span>Start {story.start_date}</span> : null}
                   {story.due_date ? <span>Due {story.due_date}</span> : null}
                   <span>{subtasks.length} subtasks</span>
                 </footer>
@@ -1101,6 +1327,164 @@ function RoadmapFeature({ cards, feature, onOpenCard }) {
         </div>
       ) : null}
     </article>
+  );
+}
+
+function ProjectTimeline({ cards, onOpenCard, project }) {
+  const points = getTimelinePoints(cards);
+
+  if (!project) {
+    return <EmptyProjectView label="Create or select a project to see its timeline." />;
+  }
+
+  return (
+    <section className="overview-workspace">
+      <div className="roadmap-header">
+        <div>
+          <h2>{project.name} Timeline</h2>
+          <p>Start and due milestones for scheduled cards.</p>
+        </div>
+      </div>
+
+      {points.length ? (
+        <div className="timeline-list">
+          {points.map((point) => (
+            <button className="timeline-row" key={`${point.card.id}-${point.kind}-${point.date}`} type="button" onClick={() => onOpenCard(point.card)}>
+              <time>{point.date}</time>
+              <span className={point.kind === "Due" ? "timeline-kind due" : "timeline-kind"}>{point.kind}</span>
+              <span className={`card-type ${point.card.card_type}`}>{cardTypeLabels[point.card.card_type]}</span>
+              <strong>{point.card.title}</strong>
+              <span>{statusLabels[point.card.status]}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="overview-panel empty-overview">No scheduled cards. Add start dates or due dates to populate the timeline.</div>
+      )}
+    </section>
+  );
+}
+
+function ProjectGantt({ cards, onOpenCard, project }) {
+  const scheduled = sortCardsForRoadmap(getScheduledCards(cards));
+  const bounds = getScheduleBounds(scheduled);
+  const totalDays = Math.max(daysBetween(bounds.start, bounds.end), 1);
+
+  if (!project) {
+    return <EmptyProjectView label="Create or select a project to see its Gantt chart." />;
+  }
+
+  return (
+    <section className="overview-workspace">
+      <div className="roadmap-header">
+        <div>
+          <h2>{project.name} Gantt</h2>
+          <p>
+            {bounds.start} to {bounds.end}
+          </p>
+        </div>
+      </div>
+
+      {scheduled.length ? (
+        <div className="gantt-chart">
+          <div className="gantt-axis">
+            <span>{bounds.start}</span>
+            <span>{bounds.end}</span>
+          </div>
+          {scheduled.map((card) => {
+            const start = cardStart(card);
+            const end = cardEnd(card);
+            const offset = Math.max(daysBetween(bounds.start, start), 0);
+            const duration = Math.max(daysBetween(start, end), 0);
+            const left = (offset / totalDays) * 100;
+            const width = Math.max(((duration || 1) / totalDays) * 100, 3);
+            return (
+              <button className="gantt-row" key={card.id} type="button" onClick={() => onOpenCard(card)}>
+                <div>
+                  <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
+                  <strong>{card.title}</strong>
+                </div>
+                <div className="gantt-track">
+                  <span
+                    className={`gantt-bar ${card.status}`}
+                    style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }}
+                  >
+                    {start === end ? start : `${start} -> ${end}`}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="overview-panel empty-overview">No scheduled cards. Add start dates or due dates to populate the Gantt chart.</div>
+      )}
+    </section>
+  );
+}
+
+function ProjectCalendar({ cards, onOpenCard, project }) {
+  const scheduled = getScheduledCards(cards);
+  const bounds = getScheduleBounds(scheduled);
+  const monthStart = parseLocalDate(bounds.start);
+  const year = monthStart.getFullYear();
+  const month = monthStart.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const calendarStart = new Date(firstDay);
+  calendarStart.setDate(firstDay.getDate() - firstDay.getDay());
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(calendarStart);
+    day.setDate(calendarStart.getDate() + index);
+    return formatDateInput(day);
+  });
+
+  if (!project) {
+    return <EmptyProjectView label="Create or select a project to see its calendar." />;
+  }
+
+  return (
+    <section className="overview-workspace">
+      <div className="roadmap-header">
+        <div>
+          <h2>{project.name} Calendar</h2>
+          <p>
+            {monthStart.toLocaleString(undefined, { month: "long" })} {year}
+          </p>
+        </div>
+      </div>
+
+      {scheduled.length ? (
+        <div className="calendar-grid">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+            <div className="calendar-heading" key={day}>{day}</div>
+          ))}
+          {days.map((day) => {
+            const dayCards = scheduled.filter((card) => card.start_date === day || card.due_date === day);
+            return (
+              <div className={parseLocalDate(day).getMonth() === month ? "calendar-day" : "calendar-day muted"} key={day}>
+                <time>{parseLocalDate(day).getDate()}</time>
+                {dayCards.map((card) => (
+                  <button className="calendar-card" key={`${day}-${card.id}`} type="button" onClick={() => onOpenCard(card)}>
+                    <span>{card.start_date === day ? "Start" : "Due"}</span>
+                    <strong>{card.title}</strong>
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="overview-panel empty-overview">No scheduled cards. Add start dates or due dates to populate the calendar.</div>
+      )}
+    </section>
+  );
+}
+
+function EmptyProjectView({ label }) {
+  return (
+    <section className="overview-workspace">
+      <div className="overview-panel empty-overview">{label}</div>
+    </section>
   );
 }
 
@@ -1294,8 +1678,21 @@ function CardEditor({ card, cards, onCancel, onChange, onCreateChild, onDelete, 
             </select>
           </label>
           <label>
+            <span>Start Date</span>
+            <input
+              value={card.start_date || ""}
+              type="date"
+              onChange={(event) => updateField("start_date", event.target.value)}
+            />
+          </label>
+          <label>
             <span>Due Date</span>
-            <input value={card.due_date || ""} type="date" onChange={(event) => updateField("due_date", event.target.value)} />
+            <input
+              value={card.due_date || ""}
+              type="date"
+              min={card.start_date || undefined}
+              onChange={(event) => updateField("due_date", event.target.value)}
+            />
           </label>
           <label>
             <span>{expectedParentType ? `Parent ${cardTypeLabels[expectedParentType]}` : "Parent"}</span>
@@ -1357,6 +1754,18 @@ function CardEditor({ card, cards, onCancel, onChange, onCreateChild, onDelete, 
           <span>Description</span>
           <textarea value={card.description || ""} onChange={(event) => updateField("description", event.target.value)} />
         </label>
+
+        <section className="comments-editor">
+          <label>
+            <span>Comments</span>
+            <textarea
+              value={card.comments || ""}
+              onChange={(event) => updateField("comments", event.target.value)}
+              placeholder={"Markdown supported. Use ```mermaid or ```mmd fenced blocks for Mermaid source."}
+            />
+          </label>
+          <MarkdownPreview value={card.comments || ""} />
+        </section>
 
         <section className="deliverables-editor">
           <header>
@@ -1420,6 +1829,22 @@ function InlineChildCreator({ disabled = false, label, onCreate, placeholder }) 
         <span>Add</span>
       </button>
     </div>
+  );
+}
+
+function MarkdownPreview({ value }) {
+  return (
+    <section className="markdown-preview">
+      <header>
+        <h3>Preview</h3>
+        <span>Markdown / MMD</span>
+      </header>
+      {value.trim() ? (
+        <div dangerouslySetInnerHTML={{ __html: markdownToHtml(value) }} />
+      ) : (
+        <p className="empty-overview">No comments yet.</p>
+      )}
+    </section>
   );
 }
 

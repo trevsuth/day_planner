@@ -125,15 +125,22 @@ Checkbox {
 }
 
 #project-description,
-#card-edit-description {
+#card-edit-description,
+#card-edit-comments {
     height: 4;
     margin-top: 1;
     border: ascii #6fdc6f;
 }
 
+#card-edit-comments {
+    height: 5;
+    margin-top: 0;
+}
+
 #card-deliverables,
 #card-edit-title,
 #card-edit-status,
+#card-edit-start-date,
 #card-edit-due-date,
 #card-edit-parent,
 #card-edit-deliverables {

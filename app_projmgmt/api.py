@@ -77,6 +77,7 @@ def get_project_cards(project_id: str) -> list[ProjectCard]:
 
 @router.post("/cards", response_model=ProjectCard)
 def post_card(card: ProjectCardCreate) -> ProjectCard:
+    validate_card_dates(card.start_date, card.due_date)
     validate_card_relationships(card.project_id, card.card_type, card.parent_id)
     return create_card(card)
 
@@ -106,14 +107,25 @@ def put_card(card_id: str, data: ProjectCardUpdate) -> ProjectCard:
     validate_card_relationships(
         existing.project_id, data.card_type, data.parent_id, card_id
     )
+    validate_card_dates(data.start_date, data.due_date)
     existing.card_type = data.card_type
     existing.title = data.title
     existing.description = data.description
+    existing.comments = data.comments
     existing.status = data.status
+    existing.start_date = data.start_date
     existing.due_date = data.due_date
     existing.parent_id = data.parent_id
     existing.deliverables = data.deliverables
     return update_card(existing)
+
+
+def validate_card_dates(start_date, due_date) -> None:
+    if start_date and due_date and start_date > due_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Start date must be on or before due date.",
+        )
 
 
 @router.delete("/cards/{card_id}", status_code=204)

@@ -135,8 +135,12 @@ class PlannerApp(App):
             placeholder="Selected card title", id="card-edit-title"
         )
         self.edit_description_area = TextArea(id="card-edit-description")
+        self.edit_comments_area = TextArea(id="card-edit-comments")
         self.edit_status_input = Input(
             placeholder=f"Status: {STATUS_HELP}", id="card-edit-status"
+        )
+        self.edit_start_date_input = Input(
+            placeholder="Start date: YYYY-MM-DD", id="card-edit-start-date"
         )
         self.edit_due_date_input = Input(
             placeholder="Due date: YYYY-MM-DD", id="card-edit-due-date"
@@ -188,7 +192,9 @@ class PlannerApp(App):
                     Static("Edit Selected Card"),
                     self.edit_title_input,
                     self.edit_description_area,
+                    self.edit_comments_area,
                     self.edit_status_input,
+                    self.edit_start_date_input,
                     self.edit_due_date_input,
                     self.edit_parent_input,
                     self.edit_deliverables_input,
@@ -426,7 +432,9 @@ class PlannerApp(App):
         if not card:
             self.edit_title_input.value = ""
             self.edit_description_area.text = ""
+            self.edit_comments_area.text = ""
             self.edit_status_input.value = ""
+            self.edit_start_date_input.value = ""
             self.edit_due_date_input.value = ""
             self.edit_parent_input.value = ""
             self.edit_deliverables_input.value = ""
@@ -435,7 +443,11 @@ class PlannerApp(App):
 
         self.edit_title_input.value = card.title
         self.edit_description_area.text = card.description or ""
+        self.edit_comments_area.text = card.comments or ""
         self.edit_status_input.value = card.status.value
+        self.edit_start_date_input.value = (
+            card.start_date.isoformat() if card.start_date else ""
+        )
         self.edit_due_date_input.value = (
             card.due_date.isoformat() if card.due_date else ""
         )
@@ -477,11 +489,24 @@ class PlannerApp(App):
             self.edit_message.update(f"Invalid status. Use: {STATUS_HELP}.")
             return
 
+        start_date_text = self.edit_start_date_input.value.strip()
+        try:
+            start_date = (
+                date.fromisoformat(start_date_text) if start_date_text else None
+            )
+        except ValueError:
+            self.edit_message.update("Invalid start date. Use YYYY-MM-DD.")
+            return
+
         due_date_text = self.edit_due_date_input.value.strip()
         try:
             due_date = date.fromisoformat(due_date_text) if due_date_text else None
         except ValueError:
             self.edit_message.update("Invalid due date. Use YYYY-MM-DD.")
+            return
+
+        if start_date and due_date and start_date > due_date:
+            self.edit_message.update("Start date must be on or before due date.")
             return
 
         parents = self.eligible_parent_cards(card)
@@ -503,7 +528,9 @@ class PlannerApp(App):
 
         card.title = title
         card.description = self.edit_description_area.text.strip() or None
+        card.comments = self.edit_comments_area.text.strip() or None
         card.status = status
+        card.start_date = start_date
         card.due_date = due_date
         card.parent_id = parent_id
         card.deliverables = self.edit_deliverables_from_form()

@@ -30,7 +30,9 @@ def init_db() -> None:
                 card_type TEXT NOT NULL,
                 title TEXT NOT NULL,
                 description TEXT,
+                comments TEXT,
                 status TEXT NOT NULL,
+                start_date TEXT,
                 due_date TEXT,
                 parent_id TEXT,
                 deliverables TEXT NOT NULL,
@@ -40,6 +42,18 @@ def init_db() -> None:
                 FOREIGN KEY(parent_id) REFERENCES project_cards(id) ON DELETE SET NULL
             )
         """)
+        ensure_project_card_columns(conn)
+
+
+def ensure_project_card_columns(conn: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(project_cards)").fetchall()
+    }
+    if "start_date" not in columns:
+        conn.execute("ALTER TABLE project_cards ADD COLUMN start_date TEXT")
+    if "comments" not in columns:
+        conn.execute("ALTER TABLE project_cards ADD COLUMN comments TEXT")
 
 
 def now_iso() -> str:
@@ -63,7 +77,9 @@ def card_from_row(row: sqlite3.Row) -> ProjectCard:
         card_type=row["card_type"],
         title=row["title"],
         description=row["description"],
+        comments=row["comments"],
         status=row["status"],
+        start_date=row["start_date"],
         due_date=row["due_date"],
         parent_id=row["parent_id"],
         deliverables=json.loads(row["deliverables"]),
@@ -158,10 +174,10 @@ def create_card(data: ProjectCardCreate) -> ProjectCard:
         conn.execute(
             """
             INSERT INTO project_cards (
-                id, project_id, card_type, title, description, status, due_date,
-                parent_id, deliverables, created_at, updated_at
+                id, project_id, card_type, title, description, comments, status,
+                start_date, due_date, parent_id, deliverables, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             serialize_card(card),
         )
@@ -174,15 +190,18 @@ def update_card(card: ProjectCard) -> ProjectCard:
         conn.execute(
             """
             UPDATE project_cards
-            SET card_type = ?, title = ?, description = ?, status = ?,
-                due_date = ?, parent_id = ?, deliverables = ?, updated_at = ?
+            SET card_type = ?, title = ?, description = ?, comments = ?,
+                status = ?, start_date = ?, due_date = ?, parent_id = ?,
+                deliverables = ?, updated_at = ?
             WHERE id = ?
             """,
             (
                 card.card_type,
                 card.title,
                 card.description,
+                card.comments,
                 card.status,
+                card.start_date.isoformat() if card.start_date else None,
                 card.due_date.isoformat() if card.due_date else None,
                 card.parent_id,
                 json.dumps(card.deliverables),
@@ -205,7 +224,9 @@ def serialize_card(card: ProjectCard) -> tuple[object, ...]:
         card.card_type,
         card.title,
         card.description,
+        card.comments,
         card.status,
+        card.start_date.isoformat() if card.start_date else None,
         card.due_date.isoformat() if card.due_date else None,
         card.parent_id,
         json.dumps(card.deliverables),

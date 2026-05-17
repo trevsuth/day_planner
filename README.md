@@ -10,9 +10,12 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Previous/next day navigation
 - Local SQLite persistence in `planner.db`
 - Textual TUI and React web interfaces backed by the same SQLite databases
-- Project management workspace with projects, epics, features, stories, subtasks, due dates, statuses, and deliverables
+- Project management workspace with projects, epics, features, stories, subtasks, start dates, due dates, statuses, and deliverables
 - Card-level project hierarchy: epics contain features, features contain stories, and stories contain subtasks
 - Project cards with linked epics and quick epic creation
+- Portfolio, roadmap, timeline, Gantt, calendar, and board views for project work
+- Drag-and-drop Kanban status updates in the web project board
+- Card comments with Markdown preview and Mermaid/MMD fenced block support
 - Project deletion from the Projects sidebar
 - FastAPI JSON API for web access
 - Optional standalone executable build with PyInstaller
@@ -151,7 +154,7 @@ Project manager TUI shortcuts:
 
 The previous `Ctrl+P`, `Ctrl+N`, `Ctrl+E`, `Ctrl+A`, `Ctrl+Up` / `Ctrl+Down`, and `Ctrl+K` / `Ctrl+J` shortcuts remain available as alternates. In the TUI project view, select an epic and press `F7` to add a feature, select a feature and press `F7` to add a story, or select a story and press `F7` to add a subtask. Deliverables can be entered as a comma-separated list before adding a card.
 
-The selected-card edit form updates as you move through cards with `F8` and `F9`. Edit the title, description, status, due date, parent number, or deliverables, then press `F10` to save. Status values are `backlog`, `in_progress`, `blocked`, and `done`. Due dates use `YYYY-MM-DD`. Feature, story, and subtask cards require a parent number from the eligible parent list shown under the edit form.
+The selected-card edit form updates as you move through cards with `F8` and `F9`. Edit the title, description, comments, status, start date, due date, parent number, or deliverables, then press `F10` to save. Status values are `backlog`, `in_progress`, `blocked`, and `done`. Dates use `YYYY-MM-DD`. Feature, story, and subtask cards require a parent number from the eligible parent list shown under the edit form.
 
 Project manager web shortcuts:
 
