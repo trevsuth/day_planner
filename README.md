@@ -145,10 +145,13 @@ Project manager TUI shortcuts:
 | `F5` | Create a project from the project name and description fields |
 | `F6` | Add a backlog epic to the selected project |
 | `F7` | Add the next child type to the selected card |
+| `F10` | Save edits to the selected card |
 | `PageUp` / `PageDown` | Select the previous or next project |
 | `F8` / `F9` | Select the previous or next card |
 
 The previous `Ctrl+P`, `Ctrl+N`, `Ctrl+E`, `Ctrl+A`, `Ctrl+Up` / `Ctrl+Down`, and `Ctrl+K` / `Ctrl+J` shortcuts remain available as alternates. In the TUI project view, select an epic and press `F7` to add a feature, select a feature and press `F7` to add a story, or select a story and press `F7` to add a subtask. Deliverables can be entered as a comma-separated list before adding a card.
+
+The selected-card edit form updates as you move through cards with `F8` and `F9`. Edit the title, description, status, due date, parent number, or deliverables, then press `F10` to save. Status values are `backlog`, `in_progress`, `blocked`, and `done`. Due dates use `YYYY-MM-DD`. Feature, story, and subtask cards require a parent number from the eligible parent list shown under the edit form.
 
 Project manager web shortcuts:
 

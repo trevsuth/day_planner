@@ -11,6 +11,7 @@ from app_planner.database import load_entry, save_entry, init_db
 from app_projmgmt.database import (
     create_card,
     create_project,
+    update_card,
     init_db as init_project_db,
     list_cards,
     list_projects,
@@ -19,6 +20,7 @@ from app_projmgmt.models import (
     CardStatus,
     CardType,
     Project,
+    ProjectCard,
     ProjectCardCreate,
     ProjectCreate,
 )
@@ -39,6 +41,15 @@ CHILD_TYPE_BY_CARD_TYPE = {
     CardType.FEATURE: CardType.STORY,
     CardType.STORY: CardType.SUBTASK,
 }
+
+PARENT_TYPE_BY_CARD_TYPE = {
+    CardType.EPIC: None,
+    CardType.FEATURE: CardType.EPIC,
+    CardType.STORY: CardType.FEATURE,
+    CardType.SUBTASK: CardType.STORY,
+}
+
+STATUS_HELP = "backlog | in_progress | blocked | done"
 
 
 def get_css_path() -> str:
@@ -69,6 +80,7 @@ class PlannerApp(App):
         ("ctrl+e", "create_epic", "Create epic"),
         ("f7", "create_child", "Create child"),
         ("ctrl+a", "create_child", "Create child"),
+        ("f10", "save_card", "Save card"),
         ("pageup", "previous_project", "Previous project"),
         ("ctrl+up", "previous_project", "Previous project"),
         ("pagedown", "next_project", "Next project"),
@@ -119,6 +131,23 @@ class PlannerApp(App):
         self.deliverables_input = Input(
             placeholder="Deliverables, comma separated", id="card-deliverables"
         )
+        self.edit_title_input = Input(
+            placeholder="Selected card title", id="card-edit-title"
+        )
+        self.edit_description_area = TextArea(id="card-edit-description")
+        self.edit_status_input = Input(
+            placeholder=f"Status: {STATUS_HELP}", id="card-edit-status"
+        )
+        self.edit_due_date_input = Input(
+            placeholder="Due date: YYYY-MM-DD", id="card-edit-due-date"
+        )
+        self.edit_parent_input = Input(
+            placeholder="Parent #: blank for project/root", id="card-edit-parent"
+        )
+        self.edit_deliverables_input = Input(
+            placeholder="Deliverables, comma separated", id="card-edit-deliverables"
+        )
+        self.edit_message = Static("", id="card-edit-message")
 
         yield Container(
             self.date_label,
@@ -156,6 +185,14 @@ class PlannerApp(App):
                     self.epic_input,
                     self.child_input,
                     self.deliverables_input,
+                    Static("Edit Selected Card"),
+                    self.edit_title_input,
+                    self.edit_description_area,
+                    self.edit_status_input,
+                    self.edit_due_date_input,
+                    self.edit_parent_input,
+                    self.edit_deliverables_input,
+                    self.edit_message,
                     id="card-panel",
                 ),
             ),
@@ -221,7 +258,7 @@ class PlannerApp(App):
         self.query_one("#planner-view").display = False
         self.query_one("#projects-view").display = True
         self.query_one("#mode-label", Label).update(
-            "Projects | F1 Planner | F5 Project | F6 Epic | F7 Child | PgUp/PgDn Project | F8/F9 Card"
+            "Projects | F1 Planner | F5 Project | F6 Epic | F7 Child | F10 Save | PgUp/PgDn Project | F8/F9 Card"
         )
         await self.reload_projects()
 
@@ -231,10 +268,17 @@ class PlannerApp(App):
             self.project_index = max(len(self.projects) - 1, 0)
         await self.reload_project_cards()
         self.render_project_lists()
+        self.populate_card_edit_form()
 
     async def reload_project_cards(self):
+        selected_id = self.selected_card.id if self.selected_card else None
         project = self.selected_project
         self.project_cards = list_cards(project.id) if project else []
+        if selected_id:
+            for index, card in enumerate(self.project_cards):
+                if card.id == selected_id:
+                    self.card_index = index
+                    break
         if self.card_index >= len(self.project_cards):
             self.card_index = max(len(self.project_cards) - 1, 0)
 
@@ -245,7 +289,7 @@ class PlannerApp(App):
         return self.projects[self.project_index]
 
     @property
-    def selected_card(self):
+    def selected_card(self) -> ProjectCard | None:
         if not self.project_cards:
             return None
         return self.project_cards[self.card_index]
@@ -254,6 +298,7 @@ class PlannerApp(App):
         if not self.projects:
             self.project_list.update("No projects yet. Enter a name and press F5.")
             self.card_list.update("Create a project before adding cards.")
+            self.populate_card_edit_form()
             return
 
         project_lines = []
@@ -266,6 +311,7 @@ class PlannerApp(App):
         project = self.selected_project
         if not self.project_cards:
             self.card_list.update(f"{project.name}\nNo cards yet. Add an epic with F6.")
+            self.populate_card_edit_form()
             return
 
         card_lines = [f"{project.name}"]
@@ -278,7 +324,7 @@ class PlannerApp(App):
                 else ""
             )
             card_lines.append(
-                f"{marker} [{CARD_TYPE_LABELS[card.card_type]}] {card.title}"
+                f"{marker} {index + 1}. [{CARD_TYPE_LABELS[card.card_type]}] {card.title}"
                 f" | {card.status.value.replace('_', ' ')} | parent: {parent}{deliverables}"
             )
         self.card_list.update("\n".join(card_lines))
@@ -358,6 +404,115 @@ class PlannerApp(App):
             if deliverable.strip()
         ]
 
+    def edit_deliverables_from_form(self) -> list[str]:
+        return [
+            deliverable.strip()
+            for deliverable in self.edit_deliverables_input.value.split(",")
+            if deliverable.strip()
+        ]
+
+    def eligible_parent_cards(self, card: ProjectCard) -> list[ProjectCard]:
+        expected_type = PARENT_TYPE_BY_CARD_TYPE[card.card_type]
+        if not expected_type:
+            return []
+        return [
+            candidate
+            for candidate in self.project_cards
+            if candidate.id != card.id and candidate.card_type == expected_type
+        ]
+
+    def populate_card_edit_form(self):
+        card = self.selected_card
+        if not card:
+            self.edit_title_input.value = ""
+            self.edit_description_area.text = ""
+            self.edit_status_input.value = ""
+            self.edit_due_date_input.value = ""
+            self.edit_parent_input.value = ""
+            self.edit_deliverables_input.value = ""
+            self.edit_message.update("No selected card.")
+            return
+
+        self.edit_title_input.value = card.title
+        self.edit_description_area.text = card.description or ""
+        self.edit_status_input.value = card.status.value
+        self.edit_due_date_input.value = (
+            card.due_date.isoformat() if card.due_date else ""
+        )
+        parents = self.eligible_parent_cards(card)
+        self.edit_parent_input.value = ""
+        for index, parent in enumerate(parents, start=1):
+            if parent.id == card.parent_id:
+                self.edit_parent_input.value = str(index)
+                break
+        self.edit_deliverables_input.value = ", ".join(card.deliverables)
+        self.edit_message.update(self.parent_edit_help(card, parents))
+
+    def parent_edit_help(self, card: ProjectCard, parents: list[ProjectCard]) -> str:
+        if card.card_type == CardType.EPIC:
+            return "Epic cards are tied to the project. F10 saves edits."
+        if not parents:
+            expected_type = PARENT_TYPE_BY_CARD_TYPE[card.card_type]
+            return f"No eligible {expected_type.value} parent cards. F10 saves details."
+        parent_choices = " | ".join(
+            f"{index}:{parent.title}" for index, parent in enumerate(parents, start=1)
+        )
+        return f"Parent #: {parent_choices}. F10 saves edits."
+
+    async def save_selected_card_from_form(self):
+        card = self.selected_card
+        if not card:
+            self.edit_message.update("No selected card to save.")
+            return
+
+        title = self.edit_title_input.value.strip()
+        if not title:
+            self.edit_message.update("Title is required.")
+            return
+
+        status_value = self.edit_status_input.value.strip() or CardStatus.BACKLOG.value
+        try:
+            status = CardStatus(status_value)
+        except ValueError:
+            self.edit_message.update(f"Invalid status. Use: {STATUS_HELP}.")
+            return
+
+        due_date_text = self.edit_due_date_input.value.strip()
+        try:
+            due_date = date.fromisoformat(due_date_text) if due_date_text else None
+        except ValueError:
+            self.edit_message.update("Invalid due date. Use YYYY-MM-DD.")
+            return
+
+        parents = self.eligible_parent_cards(card)
+        parent_text = self.edit_parent_input.value.strip()
+        parent_id = None
+        if PARENT_TYPE_BY_CARD_TYPE[card.card_type]:
+            if not parent_text:
+                self.edit_message.update("Parent # is required for this card type.")
+                return
+            try:
+                parent_index = int(parent_text)
+            except ValueError:
+                self.edit_message.update("Parent # must be a number from the list.")
+                return
+            if parent_index < 1 or parent_index > len(parents):
+                self.edit_message.update("Parent # is not in the eligible parent list.")
+                return
+            parent_id = parents[parent_index - 1].id
+
+        card.title = title
+        card.description = self.edit_description_area.text.strip() or None
+        card.status = status
+        card.due_date = due_date
+        card.parent_id = parent_id
+        card.deliverables = self.edit_deliverables_from_form()
+        update_card(card)
+        await self.reload_project_cards()
+        self.render_project_lists()
+        self.populate_card_edit_form()
+        self.edit_message.update("Saved selected card.")
+
     async def select_adjacent_project(self, direction: int):
         if not self.projects:
             return
@@ -365,12 +520,14 @@ class PlannerApp(App):
         self.card_index = 0
         await self.reload_project_cards()
         self.render_project_lists()
+        self.populate_card_edit_form()
 
     def select_adjacent_card(self, direction: int):
         if not self.project_cards:
             return
         self.card_index = (self.card_index + direction) % len(self.project_cards)
         self.render_project_lists()
+        self.populate_card_edit_form()
 
     async def reload_entry(self):
         # Update date label
@@ -445,6 +602,10 @@ class PlannerApp(App):
         if self.active_view == "projects":
             await self.create_child_from_form()
 
+    async def action_save_card(self) -> None:
+        if self.active_view == "projects":
+            await self.save_selected_card_from_form()
+
     async def action_previous_project(self) -> None:
         if self.active_view == "projects":
             await self.select_adjacent_project(-1)
@@ -477,6 +638,8 @@ class PlannerApp(App):
                 await self.create_epic_from_form()
             elif event.key in {"f7", "ctrl+a", "ctrl_a"}:
                 await self.create_child_from_form()
+            elif event.key == "f10":
+                await self.save_selected_card_from_form()
             elif event.key in {"pageup", "ctrl+up", "ctrl_up"}:
                 await self.select_adjacent_project(-1)
             elif event.key in {"pagedown", "ctrl+down", "ctrl_down"}:

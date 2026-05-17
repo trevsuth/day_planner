@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   AlertCircle,
+  BarChart3,
   CalendarDays,
   Check,
   ChevronLeft,
@@ -9,6 +10,7 @@ import {
   ClipboardList,
   FolderKanban,
   ListChecks,
+  Map,
   NotebookPen,
   Plus,
   Save,
@@ -48,6 +50,13 @@ const childTypeByCardType = {
   feature: "story",
   story: "subtask",
   subtask: null,
+};
+
+const statusOrder = {
+  backlog: 0,
+  in_progress: 1,
+  blocked: 2,
+  done: 3,
 };
 
 function formatDateInput(date) {
@@ -119,6 +128,51 @@ function cardRelationshipLabel(card, cards) {
   const parent = cards.find((candidate) => candidate.id === card.parent_id);
   if (!parent) return "No parent";
   return `${cardTypeLabels[parent.card_type]}: ${parent.title}`;
+}
+
+function isOverdue(card) {
+  return Boolean(card.due_date && card.status !== "done" && card.due_date < formatDateInput(new Date()));
+}
+
+function summarizeCards(cards) {
+  const byStatus = Object.fromEntries(STATUSES.map((status) => [status, 0]));
+  const byType = Object.fromEntries(CARD_TYPES.map((type) => [type, 0]));
+  let overdue = 0;
+  let dueSoon = 0;
+  let nextDueDate = "";
+  const today = formatDateInput(new Date());
+  const soon = addDays(today, 14);
+
+  for (const card of cards) {
+    byStatus[card.status] += 1;
+    byType[card.card_type] += 1;
+    if (isOverdue(card)) overdue += 1;
+    if (card.due_date && card.status !== "done" && card.due_date >= today && card.due_date <= soon) dueSoon += 1;
+    if (card.due_date && card.status !== "done" && (!nextDueDate || card.due_date < nextDueDate)) {
+      nextDueDate = card.due_date;
+    }
+  }
+
+  return {
+    total: cards.length,
+    byStatus,
+    byType,
+    blocked: byStatus.blocked,
+    done: byStatus.done,
+    overdue,
+    dueSoon,
+    nextDueDate,
+    completion: cards.length ? Math.round((byStatus.done / cards.length) * 100) : 0,
+  };
+}
+
+function sortCardsForRoadmap(cards) {
+  return [...cards].sort((first, second) => {
+    const firstDue = first.due_date || "9999-12-31";
+    const secondDue = second.due_date || "9999-12-31";
+    if (firstDue !== secondDue) return firstDue.localeCompare(secondDue);
+    return statusOrder[first.status] - statusOrder[second.status] || first.title.localeCompare(second.title);
+  });
 }
 
 function IconButton({ label, children, ...props }) {
@@ -371,6 +425,8 @@ function ProjectsApp() {
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState("");
   const [cards, setCards] = useState([]);
+  const [projectCardsById, setProjectCardsById] = useState({});
+  const [projectView, setProjectView] = useState("portfolio");
   const [draftProject, setDraftProject] = useState({ name: "", description: "" });
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
@@ -469,6 +525,7 @@ function ProjectsApp() {
       const data = await request("/api/projmgmt/projects");
       setProjects(data);
       setActiveProjectId((current) => current || data[0]?.id || "");
+      await refreshProjectCardCache(data);
       setStatus("Ready");
     } catch (err) {
       setError("Could not load projects.");
@@ -476,11 +533,27 @@ function ProjectsApp() {
     }
   }
 
+  async function refreshProjectCardCache(projectList = projects) {
+    if (!projectList.length) {
+      setProjectCardsById({});
+      return;
+    }
+
+    const entries = await Promise.all(
+      projectList.map(async (project) => {
+        const projectCards = await request(`/api/projmgmt/projects/${project.id}/cards`);
+        return [project.id, projectCards];
+      }),
+    );
+    setProjectCardsById(Object.fromEntries(entries));
+  }
+
   async function loadCards(projectId) {
     setError("");
     try {
       const data = await request(`/api/projmgmt/projects/${projectId}/cards`);
       setCards(data);
+      setProjectCardsById((current) => ({ ...current, [projectId]: data }));
       setStatus("Ready");
     } catch (err) {
       setError("Could not load project cards.");
@@ -500,6 +573,7 @@ function ProjectsApp() {
       }),
     });
     setProjects((current) => [project, ...current]);
+    setProjectCardsById((current) => ({ ...current, [project.id]: [] }));
     setActiveProjectId(project.id);
     setDraftProject({ name: "", description: "" });
     setError("");
@@ -549,6 +623,11 @@ function ProjectsApp() {
         }
         return remaining;
       });
+      setProjectCardsById((current) => {
+        const next = { ...current };
+        delete next[project.id];
+        return next;
+      });
       setCards((current) => (project.id === activeProjectId ? [] : current));
       setError("");
       setStatus("Project deleted");
@@ -588,6 +667,10 @@ function ProjectsApp() {
       });
 
       setCards((current) => [...current, saved]);
+      setProjectCardsById((current) => ({
+        ...current,
+        [projectId]: [...(current[projectId] || []), saved],
+      }));
       setError("");
       return saved;
     } catch (err) {
@@ -624,6 +707,16 @@ function ProjectsApp() {
         const exists = current.some((card) => card.id === saved.id);
         return exists ? current.map((card) => (card.id === saved.id ? saved : card)) : [...current, saved];
       });
+      setProjectCardsById((current) => {
+        const projectCards = current[saved.project_id] || [];
+        const exists = projectCards.some((card) => card.id === saved.id);
+        return {
+          ...current,
+          [saved.project_id]: exists
+            ? projectCards.map((card) => (card.id === saved.id ? saved : card))
+            : [...projectCards, saved],
+        };
+      });
       setSelectedCard(null);
       setError("");
     } catch (err) {
@@ -650,6 +743,10 @@ function ProjectsApp() {
     try {
       await request(`/api/projmgmt/cards/${selectedCard.id}`, { method: "DELETE" });
       setCards((current) => current.filter((card) => card.id !== selectedCard.id));
+      setProjectCardsById((current) => ({
+        ...current,
+        [selectedCard.project_id]: (current[selectedCard.project_id] || []).filter((card) => card.id !== selectedCard.id),
+      }));
       setSelectedCard(null);
       setError("");
     } catch (err) {
@@ -678,6 +775,21 @@ function ProjectsApp() {
       </header>
 
       <StatusLine error={error} label={error || status} />
+
+      <nav className="project-view-tabs" aria-label="Project management views">
+        <button className={projectView === "portfolio" ? "active" : ""} type="button" onClick={() => setProjectView("portfolio")}>
+          <BarChart3 size={17} />
+          <span>Portfolio</span>
+        </button>
+        <button className={projectView === "roadmap" ? "active" : ""} type="button" onClick={() => setProjectView("roadmap")}>
+          <Map size={17} />
+          <span>Roadmap</span>
+        </button>
+        <button className={projectView === "board" ? "active" : ""} type="button" onClick={() => setProjectView("board")}>
+          <FolderKanban size={17} />
+          <span>Board</span>
+        </button>
+      </nav>
 
       <div className="projects-layout">
         <aside className="project-sidebar">
@@ -719,34 +831,28 @@ function ProjectsApp() {
           </div>
         </aside>
 
-        <section className="project-board">
-          {STATUSES.map((statusValue) => (
-            <div className="board-column" key={statusValue}>
-              <header>
-                <h2>{statusLabels[statusValue]}</h2>
-                <IconButton label={`Add ${statusLabels[statusValue]} card`} onClick={() => startNewCard("epic", statusValue)}>
-                  <Plus size={18} />
-                </IconButton>
-              </header>
-              <div className="card-stack">
-                {cards
-                  .filter((card) => card.status === statusValue)
-                  .map((card) => (
-                    <button className="project-card" key={card.id} type="button" onClick={() => setSelectedCard(card)}>
-                      <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
-                      <strong>{card.title}</strong>
-                      {card.description ? <p>{card.description}</p> : null}
-                      <span className="relationship-label">{cardRelationshipLabel(card, cards)}</span>
-                      <footer>
-                        {card.due_date ? <span>Due {card.due_date}</span> : <span>No due date</span>}
-                        <span>{card.deliverables.length} deliverables</span>
-                      </footer>
-                    </button>
-                  ))}
-              </div>
-            </div>
-          ))}
-        </section>
+        {projectView === "portfolio" ? (
+          <PortfolioOverview
+            cardsByProjectId={projectCardsById}
+            onOpenProject={openProjectCard}
+            projects={projects}
+            selectedProjectId={activeProjectId}
+            setActiveProjectId={setActiveProjectId}
+          />
+        ) : null}
+
+        {projectView === "roadmap" ? (
+          <ProjectRoadmap
+            cards={cards}
+            onCreateEpic={() => startNewCard("epic", "backlog")}
+            onOpenCard={setSelectedCard}
+            project={activeProject}
+          />
+        ) : null}
+
+        {projectView === "board" ? (
+          <ProjectBoard cards={cards} onOpenCard={setSelectedCard} onStartNewCard={startNewCard} />
+        ) : null}
       </div>
 
       {selectedCard ? (
@@ -777,6 +883,258 @@ function ProjectsApp() {
         />
       ) : null}
     </>
+  );
+}
+
+function ProjectBoard({ cards, onOpenCard, onStartNewCard }) {
+  return (
+    <section className="project-board">
+      {STATUSES.map((statusValue) => (
+        <div className="board-column" key={statusValue}>
+          <header>
+            <h2>{statusLabels[statusValue]}</h2>
+            <IconButton label={`Add ${statusLabels[statusValue]} card`} onClick={() => onStartNewCard("epic", statusValue)}>
+              <Plus size={18} />
+            </IconButton>
+          </header>
+          <div className="card-stack">
+            {cards
+              .filter((card) => card.status === statusValue)
+              .map((card) => (
+                <ProjectCardButton card={card} cards={cards} key={card.id} onOpenCard={onOpenCard} />
+              ))}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function ProjectCardButton({ card, cards, onOpenCard }) {
+  return (
+    <button className="project-card" type="button" onClick={() => onOpenCard(card)}>
+      <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
+      <strong>{card.title}</strong>
+      {card.description ? <p>{card.description}</p> : null}
+      <span className="relationship-label">{cardRelationshipLabel(card, cards)}</span>
+      <footer>
+        {card.due_date ? <span>Due {card.due_date}</span> : <span>No due date</span>}
+        <span>{card.deliverables.length} deliverables</span>
+      </footer>
+    </button>
+  );
+}
+
+function PortfolioOverview({ cardsByProjectId, onOpenProject, projects, selectedProjectId, setActiveProjectId }) {
+  const allCards = projects.flatMap((project) => cardsByProjectId[project.id] || []);
+  const portfolioSummary = summarizeCards(allCards);
+  const atRiskCards = sortCardsForRoadmap(
+    allCards.filter((card) => card.status === "blocked" || isOverdue(card)),
+  ).slice(0, 8);
+
+  return (
+    <section className="overview-workspace">
+      <div className="overview-summary-grid">
+        <MetricTile label="Projects" value={projects.length} />
+        <MetricTile label="Open Cards" value={portfolioSummary.total - portfolioSummary.done} />
+        <MetricTile label="Blocked" tone={portfolioSummary.blocked ? "danger" : ""} value={portfolioSummary.blocked} />
+        <MetricTile label="Overdue" tone={portfolioSummary.overdue ? "danger" : ""} value={portfolioSummary.overdue} />
+        <MetricTile label="Due Soon" value={portfolioSummary.dueSoon} />
+        <MetricTile label="Done" value={`${portfolioSummary.completion}%`} />
+      </div>
+
+      <div className="portfolio-grid">
+        <section className="overview-panel">
+          <header>
+            <h2>Projects</h2>
+            <span>{allCards.length} total cards</span>
+          </header>
+          <div className="portfolio-project-list">
+            {projects.map((project) => {
+              const projectCards = cardsByProjectId[project.id] || [];
+              const summary = summarizeCards(projectCards);
+              return (
+                <button
+                  className={project.id === selectedProjectId ? "portfolio-project active" : "portfolio-project"}
+                  key={project.id}
+                  type="button"
+                  onClick={() => setActiveProjectId(project.id)}
+                  onDoubleClick={() => onOpenProject(project)}
+                >
+                  <div>
+                    <strong>{project.name}</strong>
+                    {project.description ? <span>{project.description}</span> : null}
+                  </div>
+                  <ProgressBar value={summary.completion} />
+                  <ProjectSummaryChips summary={summary} />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="overview-panel">
+          <header>
+            <h2>At Risk</h2>
+            <span>Blocked or overdue</span>
+          </header>
+          <div className="risk-list">
+            {atRiskCards.length ? (
+              atRiskCards.map((card) => {
+                const project = projects.find((candidate) => candidate.id === card.project_id);
+                return (
+                  <div className="risk-row" key={card.id}>
+                    <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
+                    <div>
+                      <strong>{card.title}</strong>
+                      <span>{project?.name || "Unknown project"}</span>
+                    </div>
+                    <span className={isOverdue(card) ? "risk-badge overdue" : "risk-badge"}>
+                      {isOverdue(card) ? "Overdue" : statusLabels[card.status]}
+                    </span>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="empty-overview">No blocked or overdue work.</p>
+            )}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function ProjectRoadmap({ cards, onCreateEpic, onOpenCard, project }) {
+  const epics = sortCardsForRoadmap(cards.filter((card) => card.card_type === "epic"));
+
+  if (!project) {
+    return (
+      <section className="overview-workspace">
+        <div className="overview-panel empty-overview">Create or select a project to see its roadmap.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="overview-workspace">
+      <div className="roadmap-header">
+        <div>
+          <h2>{project.name} Roadmap</h2>
+          <p>{project.description || "Epics, features, stories, and subtasks grouped by parent card."}</p>
+        </div>
+        <button className="save-button" type="button" onClick={onCreateEpic}>
+          <Plus size={18} />
+          <span>Epic</span>
+        </button>
+      </div>
+
+      {epics.length ? (
+        <div className="roadmap-list">
+          {epics.map((epic) => (
+            <RoadmapEpic cards={cards} epic={epic} key={epic.id} onOpenCard={onOpenCard} />
+          ))}
+        </div>
+      ) : (
+        <div className="overview-panel empty-overview">No epics yet. Add an epic to start the roadmap.</div>
+      )}
+    </section>
+  );
+}
+
+function RoadmapEpic({ cards, epic, onOpenCard }) {
+  const features = sortCardsForRoadmap(cards.filter((card) => card.parent_id === epic.id));
+  const childCards = collectDescendants(epic.id, cards);
+  const summary = summarizeCards([epic, ...childCards]);
+
+  return (
+    <article className="roadmap-epic">
+      <button className="roadmap-card epic-row" type="button" onClick={() => onOpenCard(epic)}>
+        <div>
+          <span className={`card-type ${epic.card_type}`}>{cardTypeLabels[epic.card_type]}</span>
+          <strong>{epic.title}</strong>
+          {epic.description ? <p>{epic.description}</p> : null}
+        </div>
+        <ProjectSummaryChips summary={summary} />
+      </button>
+
+      <div className="roadmap-feature-list">
+        {features.map((feature) => (
+          <RoadmapFeature cards={cards} feature={feature} key={feature.id} onOpenCard={onOpenCard} />
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function RoadmapFeature({ cards, feature, onOpenCard }) {
+  const stories = sortCardsForRoadmap(cards.filter((card) => card.parent_id === feature.id));
+  const childCards = collectDescendants(feature.id, cards);
+  const summary = summarizeCards([feature, ...childCards]);
+
+  return (
+    <article className="roadmap-feature">
+      <button className="roadmap-card" type="button" onClick={() => onOpenCard(feature)}>
+        <div>
+          <span className={`card-type ${feature.card_type}`}>{cardTypeLabels[feature.card_type]}</span>
+          <strong>{feature.title}</strong>
+        </div>
+        <ProjectSummaryChips summary={summary} />
+      </button>
+
+      {stories.length ? (
+        <div className="roadmap-story-grid">
+          {stories.map((story) => {
+            const subtasks = cards.filter((card) => card.parent_id === story.id);
+            return (
+              <button className="roadmap-story" key={story.id} type="button" onClick={() => onOpenCard(story)}>
+                <span className={`card-type ${story.card_type}`}>{cardTypeLabels[story.card_type]}</span>
+                <strong>{story.title}</strong>
+                <footer>
+                  <span>{statusLabels[story.status]}</span>
+                  {story.due_date ? <span>Due {story.due_date}</span> : null}
+                  <span>{subtasks.length} subtasks</span>
+                </footer>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function collectDescendants(parentId, cards) {
+  const directChildren = cards.filter((card) => card.parent_id === parentId);
+  return directChildren.flatMap((child) => [child, ...collectDescendants(child.id, cards)]);
+}
+
+function MetricTile({ label, tone = "", value }) {
+  return (
+    <div className={`metric-tile ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ProgressBar({ value }) {
+  return (
+    <div className="progress-bar" aria-label={`${value}% complete`}>
+      <span style={{ width: `${value}%` }} />
+    </div>
+  );
+}
+
+function ProjectSummaryChips({ summary }) {
+  return (
+    <div className="summary-chips">
+      <span>{summary.total} cards</span>
+      <span>{summary.completion}% done</span>
+      {summary.nextDueDate ? <span>Next {summary.nextDueDate}</span> : <span>No due date</span>}
+      {summary.blocked ? <span className="danger">{summary.blocked} blocked</span> : null}
+      {summary.overdue ? <span className="danger">{summary.overdue} overdue</span> : null}
+    </div>
   );
 }
 

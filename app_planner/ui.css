@@ -10,26 +10,38 @@ Static {
 }
 
 Input {
-    height: 3;
-    background: black;
+    height: 1;
+    background: #001800;
     color: #d8ffd8;
-    border: ascii #6fdc6f;
+    border: none;
 }
 
 Input:focus {
-    border: ascii #ffffff;
+    background: #d8ffd8;
+    color: black;
+    text-style: reverse;
+}
+
+Input > .input--placeholder {
+    color: #6fdc6f;
+}
+
+Input:focus > .input--placeholder {
+    background: #d8ffd8;
+    color: black;
+    text-style: reverse;
+}
+
+TextArea:focus {
+    background: #001800;
     color: #ffffff;
+    border: none;
 }
 
 TextArea {
     background: black;
     color: #d8ffd8;
     border: none;
-}
-
-TextArea:focus {
-    background: #001800;
-    color: #ffffff;
 }
 
 Checkbox {
@@ -103,18 +115,32 @@ Checkbox {
 }
 
 #project-card-list {
-    height: 1fr;
+    height: 8;
 }
 
 #project-name,
 #epic-title,
-#child-title,
-#card-deliverables {
+#child-title {
     margin-top: 1;
 }
 
-#project-description {
-    height: 6;
+#project-description,
+#card-edit-description {
+    height: 4;
     margin-top: 1;
     border: ascii #6fdc6f;
+}
+
+#card-deliverables,
+#card-edit-title,
+#card-edit-status,
+#card-edit-due-date,
+#card-edit-parent,
+#card-edit-deliverables {
+    margin-top: 0;
+}
+
+#card-edit-message {
+    min-height: 1;
+    color: #ffffff;
 }
