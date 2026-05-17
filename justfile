@@ -1,14 +1,34 @@
+# List available recipes
+default:
+    @just --list
+
 # Run the test suite
 test:
     pytest
 
 # Run the API server for the React frontend
 api:
-    uv run uvicorn app.api:app --reload
+    uv run uvicorn app_planner.api:app --reload
 
 # Run the React development server
 web:
     npm --prefix web run dev
+
+# Run the API and React development servers together
+dev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    uv run uvicorn app_planner.api:app --reload &
+    api_pid=$!
+    npm --prefix web run dev &
+    web_pid=$!
+    cleanup() {
+      kill "$api_pid" "$web_pid" 2>/dev/null || true
+      wait "$api_pid" "$web_pid" 2>/dev/null || true
+    }
+    trap cleanup EXIT
+    trap 'exit 0' INT TERM
+    wait -n "$api_pid" "$web_pid"
 
 # Build the React frontend
 web-build:

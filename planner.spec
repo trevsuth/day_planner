@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['app/ui.py'],
+    ['app_planner/ui.py'],
     pathex=[],
     binaries=[],
-    datas=[('app/ui.css', 'app')],
+    datas=[('app_planner/ui.css', 'app_planner')],
     hiddenimports=['textual', 'textual.app', 'rich', 'rich.console'],
     hookspath=[],
     hooksconfig={},

@@ -3,8 +3,8 @@ import sqlite3
 import tempfile
 import pytest
 from datetime import date
-from app.models import PlannerEntry, Task
-from app.database import init_db, save_entry, load_entry
+from app_planner.models import PlannerEntry, Task
+from app_planner.database import init_db, save_entry, load_entry
 
 
 @pytest.fixture
@@ -15,7 +15,7 @@ def temp_db(monkeypatch):
     def _get_temp_connection():
         return sqlite3.connect(path)
 
-    monkeypatch.setattr("app.database.get_connection", _get_temp_connection)
+    monkeypatch.setattr("app_planner.database.get_connection", _get_temp_connection)
     init_db()
     yield
     os.remove(path)

@@ -7,8 +7,8 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, Container
 from textual.widgets import Label, Static, Input, TextArea, Checkbox
 from textual.events import Key
-from app.models import PlannerEntry, Task
-from app.database import load_entry, save_entry, init_db
+from app_planner.models import PlannerEntry, Task
+from app_planner.database import load_entry, save_entry, init_db
 
 init_db()
 
@@ -16,7 +16,7 @@ init_db()
 def get_css_path() -> str:
     if getattr(sys, "frozen", False):
         # This activates if running as part of a PyInstaller bundle
-        return os.path.join(sys._MEIPASS, "app", "ui.css")
+        return os.path.join(sys._MEIPASS, "app_planner", "ui.css")
     else:
         # This executes when being run normally
         return os.path.join(os.path.dirname(__file__), "ui.css")
