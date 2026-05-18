@@ -8,10 +8,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Download,
   GitBranch,
   FolderKanban,
   ListChecks,
-  Map,
+  Map as MapIcon,
   NotebookPen,
   Plus,
   Save,
@@ -144,6 +145,19 @@ function plannerPriorityText(card, project) {
   return `${prefix}${cardTypeLabels[card.card_type]}: ${card.title}`.trim();
 }
 
+function csvEscape(value) {
+  const text = String(value ?? "");
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function safeFilePart(value) {
+  return (value || "project")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "project";
+}
+
 function loadStoredProjectState() {
   try {
     return JSON.parse(window.localStorage.getItem(PROJECT_STATE_STORAGE_KEY) || "{}");
@@ -192,6 +206,31 @@ function getTimelinePoints(cards) {
     ])
     .filter(Boolean)
     .sort((first, second) => first.date.localeCompare(second.date) || first.card.title.localeCompare(second.card.title));
+}
+
+function getHierarchyRows(cards, expandedIds) {
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+
+  function childCards(parentId) {
+    return sortCardsForRoadmap(cards.filter((card) => card.parent_id === parentId));
+  }
+
+  function appendRows(parentId, level) {
+    return childCards(parentId).flatMap((card) => {
+      const children = childCards(card.id);
+      const row = { card, childrenCount: children.length, isExpanded: expandedIds.has(card.id), level };
+      if (!children.length || !expandedIds.has(card.id)) return [row];
+      return [row, ...appendRows(card.id, level + 1)];
+    });
+  }
+
+  const roots = sortCardsForRoadmap(cards.filter((card) => !card.parent_id || !cardsById.has(card.parent_id)));
+  return roots.flatMap((card) => {
+    const children = childCards(card.id);
+    const row = { card, childrenCount: children.length, isExpanded: expandedIds.has(card.id), level: 0 };
+    if (!children.length || !expandedIds.has(card.id)) return [row];
+    return [row, ...appendRows(card.id, 1)];
+  });
 }
 
 function escapeHtml(value) {
@@ -1194,6 +1233,71 @@ function ProjectsApp() {
     }
   }
 
+  function exportActiveProjectCards() {
+    if (!activeProject) return;
+
+    const expandableIds = new Set(cards.filter((card) => cards.some((candidate) => candidate.parent_id === card.id)).map((card) => card.id));
+    const rows = getHierarchyRows(cards, expandableIds);
+    const headers = [
+      "Project Name",
+      "Hierarchy Level",
+      "Card ID",
+      "Type",
+      "Title",
+      "Status",
+      "Parent ID",
+      "Parent Type",
+      "Parent Title",
+      "Dependency IDs",
+      "Dependency Titles",
+      "Start Date",
+      "Due Date",
+      "Deliverables",
+      "Description",
+      "Comments",
+      "Created At",
+      "Updated At",
+    ];
+    const csvRows = [
+      headers,
+      ...rows.map(({ card, level }) => {
+        const parent = cards.find((candidate) => candidate.id === card.parent_id);
+        const dependencies = dependencyCardsFor(card, cards);
+        return [
+          activeProject.name,
+          level,
+          card.id,
+          cardTypeLabels[card.card_type],
+          card.title,
+          statusLabels[card.status],
+          card.parent_id || "",
+          parent ? cardTypeLabels[parent.card_type] : "",
+          parent?.title || "",
+          (card.dependency_ids || []).join("; "),
+          dependencies.map((dependency) => dependency.title).join("; "),
+          card.start_date || "",
+          card.due_date || "",
+          (card.deliverables || []).join("; "),
+          card.description || "",
+          card.comments || "",
+          card.created_at || "",
+          card.updated_at || "",
+        ];
+      }),
+    ];
+    const csv = `${csvRows.map((row) => row.map(csvEscape).join(",")).join("\n")}\n`;
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeFilePart(activeProject.name)}-cards-${formatDateInput(new Date())}.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setStatus(`Exported ${rows.length} cards`);
+  }
+
   return (
     <>
       <header className="topbar projects-topbar">
@@ -1212,6 +1316,10 @@ function ProjectsApp() {
           <FolderKanban size={18} />
           <span>Project Card</span>
         </button>
+        <button className="secondary-button" type="button" onClick={exportActiveProjectCards} disabled={!activeProject}>
+          <Download size={18} />
+          <span>CSV</span>
+        </button>
       </header>
 
       <StatusLine error={error} label={error || status} />
@@ -1226,7 +1334,7 @@ function ProjectsApp() {
           <span>Issues</span>
         </button>
         <button className={projectView === "roadmap" ? "active" : ""} type="button" onClick={() => setProjectView("roadmap")}>
-          <Map size={17} />
+          <MapIcon size={17} />
           <span>Roadmap</span>
         </button>
         <button className={projectView === "timeline" ? "active" : ""} type="button" onClick={() => setProjectView("timeline")}>
@@ -2011,9 +2119,38 @@ function ProjectTimeline({ cards, onOpenCard, project }) {
 }
 
 function ProjectGantt({ cards, onOpenCard, project }) {
-  const scheduled = sortCardsForRoadmap(getScheduledCards(cards));
+  const [expandedCardIds, setExpandedCardIds] = useState(() => new Set());
+  const [showUndatedCards, setShowUndatedCards] = useState(true);
+  const rows = getHierarchyRows(cards, expandedCardIds);
+  const visibleRows = showUndatedCards ? rows : rows.filter(({ card }) => card.start_date || card.due_date);
+  const scheduled = getScheduledCards(cards);
   const bounds = getScheduleBounds(scheduled);
   const totalDays = Math.max(daysBetween(bounds.start, bounds.end), 1);
+  const ganttRightPadding = 3;
+  const undatedCount = rows.filter(({ card }) => !card.start_date && !card.due_date).length;
+  const expandableCardIds = cards
+    .filter((card) => cards.some((candidate) => candidate.parent_id === card.id))
+    .map((card) => card.id);
+
+  function toggleExpanded(cardId) {
+    setExpandedCardIds((current) => {
+      const next = new Set(current);
+      if (next.has(cardId)) {
+        next.delete(cardId);
+      } else {
+        next.add(cardId);
+      }
+      return next;
+    });
+  }
+
+  function expandAll() {
+    setExpandedCardIds(new Set(expandableCardIds));
+  }
+
+  function collapseAll() {
+    setExpandedCardIds(new Set());
+  }
 
   if (!project) {
     return <EmptyProjectView label="Create or select a project to see its Gantt chart." />;
@@ -2028,42 +2165,82 @@ function ProjectGantt({ cards, onOpenCard, project }) {
             {bounds.start} to {bounds.end}
           </p>
         </div>
+        <div className="gantt-controls">
+          <label className="gantt-toggle-option">
+            <input
+              checked={showUndatedCards}
+              type="checkbox"
+              onChange={(event) => setShowUndatedCards(event.target.checked)}
+            />
+            <span>Show undated</span>
+            {undatedCount ? <em>{undatedCount}</em> : null}
+          </label>
+          <button className="secondary-button" type="button" onClick={expandAll} disabled={!expandableCardIds.length}>
+            Expand All
+          </button>
+          <button className="secondary-button" type="button" onClick={collapseAll} disabled={!expandedCardIds.size}>
+            Collapse All
+          </button>
+        </div>
       </div>
 
-      {scheduled.length ? (
+      {visibleRows.length ? (
         <div className="gantt-chart">
+          {visibleRows.map(({ card, childrenCount, isExpanded, level }) => {
+            const start = cardStart(card);
+            const end = cardEnd(card);
+            const hasSchedule = Boolean(start && end);
+            const offset = hasSchedule ? Math.max(daysBetween(bounds.start, start), 0) : 0;
+            const duration = hasSchedule ? Math.max(daysBetween(start, end), 0) : 0;
+            const left = hasSchedule ? (offset / totalDays) * 100 : 0;
+            const width = hasSchedule ? Math.max(((duration || 1) / totalDays) * 100, 3) : 0;
+            const clampedWidth = Math.max(Math.min(width, 100 - left - ganttRightPadding), 3);
+            return (
+              <article className={`gantt-row level-${level}`} key={card.id} style={{ "--gantt-indent": `${level * 22}px` }}>
+                <div className="gantt-card-label">
+                  <button
+                    className="gantt-toggle"
+                    type="button"
+                    onClick={() => toggleExpanded(card.id)}
+                    disabled={!childrenCount}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${card.title}`}
+                    title={`${isExpanded ? "Collapse" : "Expand"} ${card.title}`}
+                  >
+                    {childrenCount ? (isExpanded ? "-" : "+") : ""}
+                  </button>
+                  <button className="gantt-card-open" type="button" onClick={() => onOpenCard(card)}>
+                    <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
+                    <strong>{card.title}</strong>
+                    <IssueMarker card={card} cards={cards} compact />
+                    {childrenCount ? <span className="gantt-child-count">{childrenCount} child{childrenCount === 1 ? "" : "ren"}</span> : null}
+                  </button>
+                </div>
+                <div className="gantt-track">
+                  {hasSchedule ? (
+                    <span
+                      className={`gantt-bar ${card.status}`}
+                      style={{ left: `${left}%`, width: `${clampedWidth}%` }}
+                    >
+                      {start === end ? start : `${start} -> ${end}`}
+                    </span>
+                  ) : (
+                    <span className="gantt-unscheduled">No dates</span>
+                  )}
+                </div>
+              </article>
+            );
+          })}
           <div className="gantt-axis">
             <span>{bounds.start}</span>
             <span>{bounds.end}</span>
           </div>
-          {scheduled.map((card) => {
-            const start = cardStart(card);
-            const end = cardEnd(card);
-            const offset = Math.max(daysBetween(bounds.start, start), 0);
-            const duration = Math.max(daysBetween(start, end), 0);
-            const left = (offset / totalDays) * 100;
-            const width = Math.max(((duration || 1) / totalDays) * 100, 3);
-            return (
-              <button className="gantt-row" key={card.id} type="button" onClick={() => onOpenCard(card)}>
-                <div>
-                  <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
-                  <strong>{card.title}</strong>
-                  <IssueMarker card={card} cards={cards} compact />
-                </div>
-                <div className="gantt-track">
-                  <span
-                    className={`gantt-bar ${card.status}`}
-                    style={{ left: `${left}%`, width: `${Math.min(width, 100 - left)}%` }}
-                  >
-                    {start === end ? start : `${start} -> ${end}`}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
         </div>
       ) : (
-        <div className="overview-panel empty-overview">No scheduled cards. Add start dates or due dates to populate the Gantt chart.</div>
+        <div className="overview-panel empty-overview">
+          {showUndatedCards
+            ? "No cards yet. Add cards to populate the Gantt chart."
+            : "No scheduled cards. Add start dates or due dates, or turn on undated cards."}
+        </div>
       )}
     </section>
   );
@@ -2248,6 +2425,7 @@ function CardEditor({ card, cards, onAssignToPlanner, onCancel, onChange, onCrea
   const [plannerDate, setPlannerDate] = useState(defaultPlannerDate);
   const [plannerAssignStatus, setPlannerAssignStatus] = useState("");
   const [isAssigningPlanner, setIsAssigningPlanner] = useState(false);
+  const [isDependenciesOpen, setIsDependenciesOpen] = useState(false);
   const expectedParentType = parentTypeByCardType[card.card_type];
   const childType = childTypeByCardType[card.card_type];
   const parentCard = cards.find((candidate) => candidate.id === card.parent_id);
@@ -2263,6 +2441,7 @@ function CardEditor({ card, cards, onAssignToPlanner, onCancel, onChange, onCrea
   useEffect(() => {
     setPlannerDate(defaultPlannerDate);
     setPlannerAssignStatus("");
+    setIsDependenciesOpen(false);
   }, [card.id, defaultPlannerDate]);
 
   function updateField(field, value) {
@@ -2450,32 +2629,39 @@ function CardEditor({ card, cards, onAssignToPlanner, onCancel, onChange, onCrea
         ) : null}
 
         <section className="dependencies-editor">
-          <header>
+          <button
+            className="collapsible-section-header"
+            type="button"
+            onClick={() => setIsDependenciesOpen((current) => !current)}
+            aria-expanded={isDependenciesOpen}
+          >
             <div>
               <GitBranch size={18} />
               <h3>Dependencies</h3>
             </div>
-            <span>{dependencyIds.length} linked</span>
-          </header>
-          {dependencyOptions.length ? (
-            <div className="dependency-list">
-              {dependencyOptions.map((dependency) => (
-                <label className="dependency-option" key={dependency.id}>
-                  <input
-                    checked={dependencyIds.includes(dependency.id)}
-                    type="checkbox"
-                    onChange={() => toggleDependency(dependency.id)}
-                  />
-                  <span className={`card-type ${dependency.card_type}`}>{cardTypeLabels[dependency.card_type]}</span>
-                  <strong>{dependency.title}</strong>
-                  <span>{statusLabels[dependency.status]}</span>
-                  {dependency.due_date ? <span>Due {dependency.due_date}</span> : <span>No due date</span>}
-                </label>
-              ))}
-            </div>
-          ) : (
-            <p className="empty-overview">No other cards available.</p>
-          )}
+            <span>{isDependenciesOpen ? "Hide" : "Show"} | {dependencyIds.length} linked</span>
+          </button>
+          {isDependenciesOpen ? (
+            dependencyOptions.length ? (
+              <div className="dependency-list">
+                {dependencyOptions.map((dependency) => (
+                  <label className="dependency-option" key={dependency.id}>
+                    <input
+                      checked={dependencyIds.includes(dependency.id)}
+                      type="checkbox"
+                      onChange={() => toggleDependency(dependency.id)}
+                    />
+                    <span className={`card-type ${dependency.card_type}`}>{cardTypeLabels[dependency.card_type]}</span>
+                    <strong>{dependency.title}</strong>
+                    <span>{statusLabels[dependency.status]}</span>
+                    {dependency.due_date ? <span>Due {dependency.due_date}</span> : <span>No due date</span>}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-overview">No other cards available.</p>
+            )
+          ) : null}
         </section>
 
         {childType ? (
