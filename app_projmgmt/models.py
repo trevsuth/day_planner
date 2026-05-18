@@ -56,6 +56,7 @@ class ProjectCard(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     parent_id: str | None = None
+    dependency_ids: list[str] = Field(default_factory=list)
     deliverables: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -71,6 +72,7 @@ class ProjectCardCreate(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     parent_id: str | None = None
+    dependency_ids: list[str] = Field(default_factory=list)
     deliverables: list[str] = Field(default_factory=list)
 
 
@@ -83,4 +85,5 @@ class ProjectCardUpdate(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     parent_id: str | None = None
+    dependency_ids: list[str] = Field(default_factory=list)
     deliverables: list[str] = Field(default_factory=list)

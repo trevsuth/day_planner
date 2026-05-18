@@ -379,6 +379,9 @@ h3 {
 .project-card,
 .card-editor,
 .relationship-panel,
+.planner-assignment-panel,
+.dependencies-editor,
+.card-warning-panel,
 .inline-child-creator,
 .linked-card {
   border: 1px solid var(--line);
@@ -579,6 +582,99 @@ textarea {
   background: rgba(18, 45, 34, 0.55);
   color: var(--text);
   box-shadow: inset 0 -3px 0 var(--green);
+}
+
+.project-filter-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(220px, 1fr) minmax(260px, 1.2fr) minmax(160px, 0.75fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(91, 210, 234, 0.25);
+  background:
+    linear-gradient(135deg, rgba(91, 210, 234, 0.07), transparent 30%),
+    rgba(5, 16, 21, 0.76);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+
+.filter-search,
+.filter-group,
+.filter-schedule,
+.filter-summary {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.filter-search span,
+.filter-group > span,
+.filter-schedule span,
+.filter-summary span,
+.project-shortcuts {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.filter-search input,
+.filter-schedule select {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(91, 210, 234, 0.25);
+  background: rgba(3, 10, 14, 0.72);
+  color: var(--text);
+  outline: none;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+
+.filter-search input:focus,
+.filter-schedule select:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(123, 216, 143, 0.14);
+}
+
+.filter-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filter-chip {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(91, 210, 234, 0.22);
+  background: rgba(3, 10, 14, 0.58);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+.filter-chip.active {
+  border-color: var(--green);
+  background: rgba(18, 45, 34, 0.62);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--green);
+}
+
+.filter-summary {
+  align-items: end;
+  justify-items: end;
+}
+
+.filter-summary .secondary-button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.project-shortcuts {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: rgba(139, 169, 178, 0.78);
 }
 
 .project-sidebar {
@@ -820,6 +916,48 @@ textarea {
   gap: 3px;
 }
 
+.issues-panel {
+  min-height: 360px;
+}
+
+.issues-list {
+  display: grid;
+  gap: 10px;
+}
+
+.issue-row {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(255, 105, 97, 0.34);
+  background:
+    linear-gradient(135deg, rgba(255, 105, 97, 0.08), transparent 36%),
+    rgba(5, 16, 21, 0.78);
+  color: var(--text);
+  text-align: left;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.issue-row:hover {
+  border-color: rgba(255, 105, 97, 0.7);
+}
+
+.issue-row > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.issue-row ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 .empty-overview {
   color: var(--muted);
 }
@@ -916,7 +1054,7 @@ textarea {
 
 .timeline-row {
   display: grid;
-  grid-template-columns: 110px 70px auto minmax(0, 1fr) auto;
+  grid-template-columns: 110px 70px auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   min-height: 50px;
@@ -1084,7 +1222,10 @@ textarea {
 
 .board-column > header,
 .card-editor > header,
-.deliverables-editor > header {
+.deliverables-editor > header,
+.planner-assignment-panel > header,
+.dependencies-editor > header,
+.card-warning-panel > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1115,6 +1256,13 @@ textarea {
   cursor: grabbing;
 }
 
+.project-card.keyboard-selected {
+  border-color: var(--green);
+  box-shadow:
+    inset 4px 0 0 var(--green),
+    0 0 22px rgba(123, 216, 143, 0.12);
+}
+
 .project-card:hover,
 .linked-card:hover,
 .project-list > div:hover {
@@ -1134,6 +1282,35 @@ textarea {
 
 .relationship-label {
   color: var(--amber);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.issue-badge {
+  width: fit-content;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 105, 97, 0.52);
+  background: rgba(88, 29, 27, 0.4);
+  color: var(--danger);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+}
+
+.issue-badge.compact,
+.calendar-card .issue-badge {
+  padding: 2px 6px;
+  color: var(--danger);
+  font-size: 0.66rem;
+}
+
+.empty-column {
+  margin: 0;
+  padding: 10px;
+  border: 1px dashed rgba(91, 210, 234, 0.22);
+  color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -1227,6 +1404,125 @@ textarea {
   color: var(--dim);
   font-size: 0.72rem;
   font-weight: 900;
+  text-transform: uppercase;
+}
+
+.planner-assignment-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(5, 16, 21, 0.72);
+}
+
+.planner-assignment-panel > header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.planner-assignment-panel h3 {
+  margin: 0;
+}
+
+.planner-assignment-panel > header > span,
+.planner-assignment-panel p {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.planner-assignment-panel > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.planner-assignment-panel p {
+  margin: 0;
+  color: var(--amber);
+}
+
+.card-warning-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-color: rgba(255, 105, 97, 0.5);
+  background:
+    linear-gradient(135deg, rgba(255, 105, 97, 0.12), transparent 38%),
+    rgba(42, 15, 16, 0.8);
+}
+
+.card-warning-panel > header {
+  justify-content: flex-start;
+  color: var(--danger);
+}
+
+.card-warning-panel h3,
+.dependencies-editor h3 {
+  margin: 0;
+}
+
+.card-warning-panel ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 0.86rem;
+}
+
+.dependencies-editor {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(5, 16, 21, 0.72);
+}
+
+.dependencies-editor > header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dependencies-editor > header > span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.dependency-list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.dependency-option {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(91, 210, 234, 0.2);
+  background: rgba(3, 10, 14, 0.52);
+  color: var(--text);
+  font-size: 0.82rem;
+  text-transform: none;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+
+.dependency-option input {
+  width: 16px;
+  height: 16px;
+}
+
+.dependency-option > span:last-child {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
   text-transform: uppercase;
 }
 
@@ -1422,6 +1718,15 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .project-filter-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-summary {
+    align-items: start;
+    justify-items: start;
+  }
+
   .project-board {
     grid-template-columns: repeat(4, 238px);
   }
@@ -1482,6 +1787,8 @@ textarea {
   .editor-grid,
   .relationship-panel,
   .inline-child-creator,
+  .planner-assignment-panel > div,
+  .dependency-option,
   .linked-card,
   .comments-editor,
   .overview-summary-grid {

@@ -35,6 +35,7 @@ def init_db() -> None:
                 start_date TEXT,
                 due_date TEXT,
                 parent_id TEXT,
+                dependency_ids TEXT NOT NULL DEFAULT '[]',
                 deliverables TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -54,6 +55,10 @@ def ensure_project_card_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE project_cards ADD COLUMN start_date TEXT")
     if "comments" not in columns:
         conn.execute("ALTER TABLE project_cards ADD COLUMN comments TEXT")
+    if "dependency_ids" not in columns:
+        conn.execute(
+            "ALTER TABLE project_cards ADD COLUMN dependency_ids TEXT NOT NULL DEFAULT '[]'"
+        )
 
 
 def now_iso() -> str:
@@ -82,6 +87,7 @@ def card_from_row(row: sqlite3.Row) -> ProjectCard:
         start_date=row["start_date"],
         due_date=row["due_date"],
         parent_id=row["parent_id"],
+        dependency_ids=json.loads(row["dependency_ids"]),
         deliverables=json.loads(row["deliverables"]),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -175,9 +181,10 @@ def create_card(data: ProjectCardCreate) -> ProjectCard:
             """
             INSERT INTO project_cards (
                 id, project_id, card_type, title, description, comments, status,
-                start_date, due_date, parent_id, deliverables, created_at, updated_at
+                start_date, due_date, parent_id, dependency_ids, deliverables,
+                created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             serialize_card(card),
         )
@@ -192,7 +199,7 @@ def update_card(card: ProjectCard) -> ProjectCard:
             UPDATE project_cards
             SET card_type = ?, title = ?, description = ?, comments = ?,
                 status = ?, start_date = ?, due_date = ?, parent_id = ?,
-                deliverables = ?, updated_at = ?
+                dependency_ids = ?, deliverables = ?, updated_at = ?
             WHERE id = ?
             """,
             (
@@ -204,6 +211,7 @@ def update_card(card: ProjectCard) -> ProjectCard:
                 card.start_date.isoformat() if card.start_date else None,
                 card.due_date.isoformat() if card.due_date else None,
                 card.parent_id,
+                json.dumps(card.dependency_ids),
                 json.dumps(card.deliverables),
                 card.updated_at.isoformat(),
                 card.id,
@@ -229,6 +237,7 @@ def serialize_card(card: ProjectCard) -> tuple[object, ...]:
         card.start_date.isoformat() if card.start_date else None,
         card.due_date.isoformat() if card.due_date else None,
         card.parent_id,
+        json.dumps(card.dependency_ids),
         json.dumps(card.deliverables),
         card.created_at.isoformat(),
         card.updated_at.isoformat(),

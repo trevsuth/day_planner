@@ -79,6 +79,7 @@ def get_project_cards(project_id: str) -> list[ProjectCard]:
 def post_card(card: ProjectCardCreate) -> ProjectCard:
     validate_card_dates(card.start_date, card.due_date)
     validate_card_relationships(card.project_id, card.card_type, card.parent_id)
+    validate_card_dependencies(card.project_id, card.dependency_ids)
     return create_card(card)
 
 
@@ -107,6 +108,7 @@ def put_card(card_id: str, data: ProjectCardUpdate) -> ProjectCard:
     validate_card_relationships(
         existing.project_id, data.card_type, data.parent_id, card_id
     )
+    validate_card_dependencies(existing.project_id, data.dependency_ids, card_id)
     validate_card_dates(data.start_date, data.due_date)
     existing.card_type = data.card_type
     existing.title = data.title
@@ -116,6 +118,7 @@ def put_card(card_id: str, data: ProjectCardUpdate) -> ProjectCard:
     existing.start_date = data.start_date
     existing.due_date = data.due_date
     existing.parent_id = data.parent_id
+    existing.dependency_ids = data.dependency_ids
     existing.deliverables = data.deliverables
     return update_card(existing)
 
@@ -184,3 +187,27 @@ def validate_card_relationships(
             status_code=400,
             detail=f"{card_type.value} cards must be tied to a {expected_parent_type.value}.",
         )
+
+
+def validate_card_dependencies(
+    project_id: str,
+    dependency_ids: list[str],
+    card_id: str | None = None,
+) -> None:
+    if len(dependency_ids) != len(set(dependency_ids)):
+        raise HTTPException(
+            status_code=400, detail="Dependency list contains duplicates."
+        )
+
+    for dependency_id in dependency_ids:
+        if dependency_id == card_id:
+            raise HTTPException(
+                status_code=400, detail="A card cannot depend on itself."
+            )
+
+        dependency = get_card(dependency_id)
+        if not dependency or dependency.project_id != project_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Dependency cards must belong to the same project.",
+            )

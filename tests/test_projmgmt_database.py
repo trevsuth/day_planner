@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from app_projmgmt.api import (
     card_has_children,
+    validate_card_dependencies,
     validate_card_dates,
     validate_card_relationships,
 )
@@ -57,6 +58,7 @@ def test_create_project_and_card(temp_db):
             status=CardStatus.IN_PROGRESS,
             start_date=date(2026, 5, 20),
             due_date=date(2026, 6, 1),
+            dependency_ids=[],
             deliverables=["Design approval", "Release checklist"],
         )
     )
@@ -70,6 +72,7 @@ def test_create_project_and_card(temp_db):
     assert loaded_card.comments == "## Notes\n\n```mermaid\ngraph TD\nA-->B\n```"
     assert loaded_card.start_date == date(2026, 5, 20)
     assert loaded_card.due_date == date(2026, 6, 1)
+    assert loaded_card.dependency_ids == []
     assert loaded_card.deliverables == ["Design approval", "Release checklist"]
     assert list_projects() == [project]
     assert list_cards(project.id) == [loaded_card]
@@ -89,6 +92,7 @@ def test_update_card(temp_db):
     card.comments = "Ready for release"
     card.start_date = date(2026, 6, 2)
     card.due_date = date(2026, 6, 4)
+    card.dependency_ids = []
     card.deliverables = ["OAuth flow"]
     updated = update_card(card)
 
@@ -96,6 +100,7 @@ def test_update_card(temp_db):
     assert get_card(card.id).comments == "Ready for release"
     assert get_card(card.id).start_date == date(2026, 6, 2)
     assert get_card(card.id).due_date == date(2026, 6, 4)
+    assert get_card(card.id).dependency_ids == []
     assert get_card(card.id).deliverables == ["OAuth flow"]
 
 
@@ -153,6 +158,44 @@ def test_validate_card_dates(temp_db):
         validate_card_dates(date(2026, 5, 3), date(2026, 5, 2))
 
 
+def test_validate_card_dependencies(temp_db):
+    project = create_project(ProjectCreate(name="Dependencies"))
+    other_project = create_project(ProjectCreate(name="Other"))
+    dependency = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="API contract",
+        )
+    )
+    card = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Frontend wiring",
+            dependency_ids=[dependency.id],
+        )
+    )
+    other_card = create_card(
+        ProjectCardCreate(
+            project_id=other_project.id,
+            card_type=CardType.EPIC,
+            title="Separate project",
+        )
+    )
+
+    validate_card_dependencies(project.id, [dependency.id], card.id)
+
+    with pytest.raises(HTTPException):
+        validate_card_dependencies(project.id, [dependency.id, dependency.id], card.id)
+
+    with pytest.raises(HTTPException):
+        validate_card_dependencies(project.id, [card.id], card.id)
+
+    with pytest.raises(HTTPException):
+        validate_card_dependencies(project.id, [other_card.id], card.id)
+
+
 def test_init_db_adds_new_columns_to_existing_cards_table(monkeypatch):
     fd, path = tempfile.mkstemp()
     os.close(fd)
@@ -189,5 +232,5 @@ def test_init_db_adds_new_columns_to_existing_cards_table(monkeypatch):
             for row in conn.execute("PRAGMA table_info(project_cards)").fetchall()
         }
 
-    assert {"start_date", "comments"}.issubset(columns)
+    assert {"start_date", "comments", "dependency_ids"}.issubset(columns)
     os.remove(path)

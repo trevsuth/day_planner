@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  GitBranch,
   FolderKanban,
   ListChecks,
   Map,
@@ -52,11 +53,22 @@ const childTypeByCardType = {
   subtask: null,
 };
 
+const PROJECT_STATE_STORAGE_KEY = "dailyPlanner.projectState";
+
 const statusOrder = {
   backlog: 0,
   in_progress: 1,
   blocked: 2,
   done: 3,
+};
+
+const PROJECT_VIEWS = ["portfolio", "issues", "roadmap", "timeline", "gantt", "calendar", "board"];
+
+const defaultProjectFilters = {
+  query: "",
+  cardTypes: [],
+  statuses: [],
+  schedule: "all",
 };
 
 function formatDateInput(date) {
@@ -122,8 +134,22 @@ function emptyCard(projectId) {
     start_date: "",
     due_date: "",
     parent_id: "",
+    dependency_ids: [],
     deliverables: [""],
   };
+}
+
+function plannerPriorityText(card, project) {
+  const prefix = project?.name ? `${project.name} - ` : "";
+  return `${prefix}${cardTypeLabels[card.card_type]}: ${card.title}`.trim();
+}
+
+function loadStoredProjectState() {
+  try {
+    return JSON.parse(window.localStorage.getItem(PROJECT_STATE_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
 }
 
 function cardStart(card) {
@@ -259,6 +285,85 @@ function cardRelationshipLabel(card, cards) {
 
 function isOverdue(card) {
   return Boolean(card.due_date && card.status !== "done" && card.due_date < formatDateInput(new Date()));
+}
+
+function isDueSoon(card) {
+  const today = formatDateInput(new Date());
+  const soon = addDays(today, 14);
+  return Boolean(card.due_date && card.status !== "done" && card.due_date >= today && card.due_date <= soon);
+}
+
+function cardMatchesFilters(card, filters) {
+  if (filters.cardTypes.length && !filters.cardTypes.includes(card.card_type)) return false;
+  if (filters.statuses.length && !filters.statuses.includes(card.status)) return false;
+
+  if (filters.schedule === "blocked" && card.status !== "blocked") return false;
+  if (filters.schedule === "overdue" && !isOverdue(card)) return false;
+  if (filters.schedule === "due_soon" && !isDueSoon(card)) return false;
+  if (filters.schedule === "undated" && (card.start_date || card.due_date)) return false;
+
+  const query = filters.query.trim().toLowerCase();
+  if (!query) return true;
+
+  const searchable = [
+    card.title,
+    card.description,
+    card.comments,
+    ...(card.deliverables || []),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return searchable.includes(query);
+}
+
+function dependencyCardsFor(card, cards) {
+  const dependencyIds = card.dependency_ids || [];
+  return dependencyIds.map((dependencyId) => cards.find((candidate) => candidate.id === dependencyId)).filter(Boolean);
+}
+
+function cardDependencyIssues(card, cards) {
+  const issues = [];
+  const dependencies = dependencyCardsFor(card, cards);
+
+  dependencies.forEach((dependency) => {
+    if (dependency.status === "blocked" && card.status !== "done") {
+      issues.push({
+        type: "blocked_dependency",
+        severity: "warning",
+        dependency,
+        message: `Depends on blocked card "${dependency.title}".`,
+      });
+    }
+
+    if (dependency.due_date && card.start_date && card.start_date < dependency.due_date) {
+      issues.push({
+        type: "date_conflict",
+        severity: "warning",
+        dependency,
+        message: `Starts ${card.start_date} before dependency "${dependency.title}" is due ${dependency.due_date}.`,
+      });
+    } else if (dependency.due_date && card.due_date && card.due_date < dependency.due_date) {
+      issues.push({
+        type: "date_conflict",
+        severity: "warning",
+        dependency,
+        message: `Due ${card.due_date} before dependency "${dependency.title}" is due ${dependency.due_date}.`,
+      });
+    }
+  });
+
+  return issues;
+}
+
+function projectIssuesForCards(cards) {
+  return cards
+    .map((card) => ({
+      card,
+      issues: cardDependencyIssues(card, cards),
+    }))
+    .filter((item) => item.issues.length);
 }
 
 function summarizeCards(cards) {
@@ -559,19 +664,41 @@ function PlannerApp() {
 }
 
 function ProjectsApp() {
+  const storedProjectState = useMemo(loadStoredProjectState, []);
   const [projects, setProjects] = useState([]);
-  const [activeProjectId, setActiveProjectId] = useState("");
+  const [activeProjectId, setActiveProjectId] = useState(storedProjectState.activeProjectId || "");
   const [cards, setCards] = useState([]);
   const [projectCardsById, setProjectCardsById] = useState({});
-  const [projectView, setProjectView] = useState("portfolio");
+  const [projectView, setProjectView] = useState(
+    PROJECT_VIEWS.includes(storedProjectState.projectView) ? storedProjectState.projectView : "portfolio",
+  );
+  const [projectFilters, setProjectFilters] = useState({
+    ...defaultProjectFilters,
+    ...(storedProjectState.projectFilters || {}),
+  });
+  const [keyboardCardId, setKeyboardCardId] = useState("");
   const [draftProject, setDraftProject] = useState({ name: "", description: "" });
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
   const [status, setStatus] = useState("Loading");
   const [error, setError] = useState("");
   const projectNameInputRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
+  const filteredCards = cards.filter((card) => cardMatchesFilters(card, projectFilters));
+  const filteredProjectCardsById = Object.fromEntries(
+    Object.entries(projectCardsById).map(([projectId, projectCards]) => [
+      projectId,
+      projectCards.filter((card) => cardMatchesFilters(card, projectFilters)),
+    ]),
+  );
+  const filteredCardIds = filteredCards.map((card) => card.id).join("|");
+  const hasActiveFilters =
+    projectFilters.query ||
+    projectFilters.cardTypes.length ||
+    projectFilters.statuses.length ||
+    projectFilters.schedule !== "all";
 
   useEffect(() => {
     loadProjects();
@@ -584,6 +711,28 @@ function ProjectsApp() {
       setCards([]);
     }
   }, [activeProjectId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      PROJECT_STATE_STORAGE_KEY,
+      JSON.stringify({
+        activeProjectId,
+        projectView,
+        projectFilters,
+      }),
+    );
+  }, [activeProjectId, projectFilters, projectView]);
+
+  useEffect(() => {
+    if (!filteredCards.length) {
+      setKeyboardCardId("");
+      return;
+    }
+
+    setKeyboardCardId((current) =>
+      filteredCards.some((card) => card.id === current) ? current : filteredCards[0].id,
+    );
+  }, [filteredCardIds]);
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -615,9 +764,34 @@ function ProjectsApp() {
         return;
       }
 
+      const key = event.key.toLowerCase();
+
+      if (!isTyping && !event.altKey && key === "/") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      if (!isTyping && !event.altKey && (key === "j" || event.key === "ArrowDown")) {
+        event.preventDefault();
+        selectAdjacentCard(1);
+        return;
+      }
+
+      if (!isTyping && !event.altKey && (key === "k" || event.key === "ArrowUp")) {
+        event.preventDefault();
+        selectAdjacentCard(-1);
+        return;
+      }
+
+      if (!isTyping && !event.altKey && event.key === "Enter") {
+        event.preventDefault();
+        openKeyboardCard();
+        return;
+      }
+
       if (isTyping || !event.altKey) return;
 
-      const key = event.key.toLowerCase();
       if (key === "n") {
         event.preventDefault();
         projectNameInputRef.current?.focus();
@@ -633,15 +807,27 @@ function ProjectsApp() {
       } else if (key === "k" || event.key === "ArrowUp") {
         event.preventDefault();
         selectAdjacentProject(-1);
-      } else if (["1", "2", "3", "4"].includes(key)) {
+      } else if (PROJECT_VIEWS[Number(key) - 1]) {
         event.preventDefault();
-        startNewCard("epic", STATUSES[Number(key) - 1]);
+        setProjectView(PROJECT_VIEWS[Number(key) - 1]);
+      } else if (key === "0") {
+        event.preventDefault();
+        clearProjectFilters();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeProject, activeProjectId, projects, selectedCard, selectedProject]);
+  }, [
+    activeProject,
+    activeProjectId,
+    filteredCardIds,
+    keyboardCardId,
+    projectView,
+    projects,
+    selectedCard,
+    selectedProject,
+  ]);
 
   async function request(path, options = {}) {
     const response = await fetch(path, {
@@ -661,7 +847,7 @@ function ProjectsApp() {
     try {
       const data = await request("/api/projmgmt/projects");
       setProjects(data);
-      setActiveProjectId((current) => current || data[0]?.id || "");
+      setActiveProjectId((current) => (data.some((project) => project.id === current) ? current : data[0]?.id || ""));
       await refreshProjectCardCache(data);
       setStatus("Ready");
     } catch (err) {
@@ -778,6 +964,44 @@ function ProjectsApp() {
     setSelectedCard({ ...emptyCard(activeProjectId), card_type: type, status: statusValue, parent_id: parentId });
   }
 
+  function updateProjectFilter(field, value) {
+    setProjectFilters((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleProjectFilter(field, value) {
+    setProjectFilters((current) => {
+      const values = current[field];
+      return {
+        ...current,
+        [field]: values.includes(value) ? values.filter((item) => item !== value) : [...values, value],
+      };
+    });
+  }
+
+  function clearProjectFilters() {
+    setProjectFilters({
+      query: "",
+      cardTypes: [],
+      statuses: [],
+      schedule: "all",
+    });
+  }
+
+  function selectAdjacentCard(direction) {
+    if (!filteredCards.length) return;
+    const currentIndex = Math.max(
+      filteredCards.findIndex((card) => card.id === keyboardCardId),
+      0,
+    );
+    const nextIndex = (currentIndex + direction + filteredCards.length) % filteredCards.length;
+    setKeyboardCardId(filteredCards[nextIndex].id);
+  }
+
+  function openKeyboardCard() {
+    const card = filteredCards.find((candidate) => candidate.id === keyboardCardId) || filteredCards[0];
+    if (card) setSelectedCard(card);
+  }
+
   async function saveCard(event) {
     event?.preventDefault();
     await saveSelectedCard();
@@ -801,6 +1025,7 @@ function ProjectsApp() {
           start_date: null,
           due_date: null,
           parent_id: parent?.id || null,
+          dependency_ids: [],
           deliverables: [],
         }),
       });
@@ -834,6 +1059,7 @@ function ProjectsApp() {
       start_date: selectedCard.start_date || null,
       due_date: selectedCard.due_date || null,
       parent_id: selectedCard.parent_id || null,
+      dependency_ids: selectedCard.dependency_ids || [],
       deliverables: selectedCard.deliverables.map((item) => item.trim()).filter(Boolean),
     };
 
@@ -862,6 +1088,7 @@ function ProjectsApp() {
             : [...projectCards, saved],
         };
       });
+      setKeyboardCardId(saved.id);
       setSelectedCard(null);
       setError("");
     } catch (err) {
@@ -911,6 +1138,7 @@ function ProjectsApp() {
       start_date: card.start_date || null,
       due_date: card.due_date || null,
       parent_id: card.parent_id || null,
+      dependency_ids: card.dependency_ids || [],
       deliverables: card.deliverables || [],
     };
 
@@ -928,6 +1156,41 @@ function ProjectsApp() {
       setStatus(`Moved to ${statusLabels[nextStatus]}`);
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function assignCardToPlanner(card, plannerDate) {
+    if (!card?.title.trim() || !plannerDate) return { ok: false, message: "Choose a card and date." };
+    const today = formatDateInput(new Date());
+    if (plannerDate < today) {
+      return { ok: false, message: "Choose today or a future date." };
+    }
+
+    try {
+      const entry = await request(`/api/planner/entries/${plannerDate}`);
+      const normalized = normalizeEntry(entry, plannerDate);
+      const priority = plannerPriorityText(card, activeProject);
+      const existingIndex = normalized.priorities.findIndex((item) => item.trim() === priority);
+
+      if (existingIndex >= 0) {
+        return { ok: true, message: `Already assigned to priority ${existingIndex + 1}.` };
+      }
+
+      const openIndex = normalized.priorities.findIndex((item) => !item.trim());
+      if (openIndex < 0) {
+        return { ok: false, message: `${plannerDate} has no open priority slots.` };
+      }
+
+      const priorities = [...normalized.priorities];
+      priorities[openIndex] = priority;
+      await request(`/api/planner/entries/${plannerDate}`, {
+        method: "PUT",
+        body: JSON.stringify(compactEntry({ ...normalized, priorities })),
+      });
+
+      return { ok: true, message: `Assigned to ${plannerDate} priority ${openIndex + 1}.` };
+    } catch (err) {
+      return { ok: false, message: err.message || "Could not assign card to planner." };
     }
   }
 
@@ -958,6 +1221,10 @@ function ProjectsApp() {
           <BarChart3 size={17} />
           <span>Portfolio</span>
         </button>
+        <button className={projectView === "issues" ? "active" : ""} type="button" onClick={() => setProjectView("issues")}>
+          <AlertCircle size={17} />
+          <span>Issues</span>
+        </button>
         <button className={projectView === "roadmap" ? "active" : ""} type="button" onClick={() => setProjectView("roadmap")}>
           <Map size={17} />
           <span>Roadmap</span>
@@ -979,6 +1246,19 @@ function ProjectsApp() {
           <span>Board</span>
         </button>
       </nav>
+
+      <ProjectFilters
+        filters={projectFilters}
+        hasActiveFilters={hasActiveFilters}
+        onClear={clearProjectFilters}
+        onQueryChange={(value) => updateProjectFilter("query", value)}
+        onScheduleChange={(value) => updateProjectFilter("schedule", value)}
+        onToggleCardType={(value) => toggleProjectFilter("cardTypes", value)}
+        onToggleStatus={(value) => toggleProjectFilter("statuses", value)}
+        resultCount={filteredCards.length}
+        searchInputRef={searchInputRef}
+        totalCount={cards.length}
+      />
 
       <div className="projects-layout">
         <aside className="project-sidebar">
@@ -1022,7 +1302,7 @@ function ProjectsApp() {
 
         {projectView === "portfolio" ? (
           <PortfolioOverview
-            cardsByProjectId={projectCardsById}
+            cardsByProjectId={hasActiveFilters ? filteredProjectCardsById : projectCardsById}
             onOpenProject={openProjectCard}
             projects={projects}
             selectedProjectId={activeProjectId}
@@ -1032,32 +1312,37 @@ function ProjectsApp() {
 
         {projectView === "roadmap" ? (
           <ProjectRoadmap
-            cards={cards}
+            cards={filteredCards}
             onCreateEpic={() => startNewCard("epic", "backlog")}
             onOpenCard={setSelectedCard}
             project={activeProject}
           />
         ) : null}
 
+        {projectView === "issues" ? (
+          <ProjectIssues cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
+        ) : null}
+
         {projectView === "board" ? (
           <ProjectBoard
-            cards={cards}
+            cards={filteredCards}
             onMoveCard={moveCardToStatus}
             onOpenCard={setSelectedCard}
             onStartNewCard={startNewCard}
+            selectedCardId={keyboardCardId}
           />
         ) : null}
 
         {projectView === "timeline" ? (
-          <ProjectTimeline cards={cards} onOpenCard={setSelectedCard} project={activeProject} />
+          <ProjectTimeline cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
         ) : null}
 
         {projectView === "gantt" ? (
-          <ProjectGantt cards={cards} onOpenCard={setSelectedCard} project={activeProject} />
+          <ProjectGantt cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
         ) : null}
 
         {projectView === "calendar" ? (
-          <ProjectCalendar cards={cards} onOpenCard={setSelectedCard} project={activeProject} />
+          <ProjectCalendar cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
         ) : null}
       </div>
 
@@ -1067,6 +1352,7 @@ function ProjectsApp() {
           cards={cards}
           onCancel={() => setSelectedCard(null)}
           onChange={setSelectedCard}
+          onAssignToPlanner={assignCardToPlanner}
           onCreateChild={(parent, title) => createInlineCard({ parent, title })}
           onDelete={deleteSelectedCard}
           onSubmit={saveCard}
@@ -1234,6 +1520,7 @@ function ApiReference() {
   "start_date": "2026-05-17",
   "due_date": "2026-05-24",
   "parent_id": "epic-id",
+  "dependency_ids": ["api-contract-card-id"],
   "deliverables": ["Timeline", "Gantt"]
 }`}
           />
@@ -1248,6 +1535,8 @@ function ApiReference() {
             <li>Stories must have a feature parent.</li>
             <li>Subtasks must have a story parent.</li>
             <li>Start date must be on or before due date.</li>
+            <li>Dependency cards must belong to the same project.</li>
+            <li>Dependency date conflicts are warnings and do not block saves.</li>
             <li>Cards with children cannot be deleted.</li>
           </ul>
         </section>
@@ -1277,7 +1566,92 @@ function CodeBlock({ value }) {
   return <pre className="api-code"><code>{value}</code></pre>;
 }
 
-function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard }) {
+function ProjectFilters({
+  filters,
+  hasActiveFilters,
+  onClear,
+  onQueryChange,
+  onScheduleChange,
+  onToggleCardType,
+  onToggleStatus,
+  resultCount,
+  searchInputRef,
+  totalCount,
+}) {
+  return (
+    <section className="project-filter-panel" aria-label="Project filters">
+      <label className="filter-search">
+        <span>Search</span>
+        <input
+          ref={searchInputRef}
+          value={filters.query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="Title, description, comments, deliverables"
+        />
+      </label>
+
+      <div className="filter-group" aria-label="Card type filters">
+        <span>Type</span>
+        <div className="filter-buttons">
+          {CARD_TYPES.map((type) => (
+            <button
+              className={filters.cardTypes.includes(type) ? "filter-chip active" : "filter-chip"}
+              key={type}
+              type="button"
+              onClick={() => onToggleCardType(type)}
+            >
+              {cardTypeLabels[type]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="filter-group" aria-label="Status filters">
+        <span>Status</span>
+        <div className="filter-buttons">
+          {STATUSES.map((statusValue) => (
+            <button
+              className={filters.statuses.includes(statusValue) ? "filter-chip active" : "filter-chip"}
+              key={statusValue}
+              type="button"
+              onClick={() => onToggleStatus(statusValue)}
+            >
+              {statusLabels[statusValue]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label className="filter-schedule">
+        <span>Schedule</span>
+        <select value={filters.schedule} onChange={(event) => onScheduleChange(event.target.value)}>
+          <option value="all">All cards</option>
+          <option value="blocked">Blocked</option>
+          <option value="overdue">Overdue</option>
+          <option value="due_soon">Due soon</option>
+          <option value="undated">Unassigned dates</option>
+        </select>
+      </label>
+
+      <div className="filter-summary">
+        <span>
+          {resultCount} of {totalCount} cards
+        </span>
+        {hasActiveFilters ? (
+          <button className="secondary-button" type="button" onClick={onClear}>
+            Clear
+          </button>
+        ) : null}
+      </div>
+
+      <p className="project-shortcuts">
+        / search | J/K select | Enter open | Alt+1-7 views | Alt+0 clear
+      </p>
+    </section>
+  );
+}
+
+function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard, selectedCardId }) {
   const [dragOverStatus, setDragOverStatus] = useState("");
 
   function dropCard(event, statusValue) {
@@ -1311,8 +1685,17 @@ function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard }) {
             {cards
               .filter((card) => card.status === statusValue)
               .map((card) => (
-                <ProjectCardButton card={card} cards={cards} key={card.id} onOpenCard={onOpenCard} />
+                <ProjectCardButton
+                  card={card}
+                  cards={cards}
+                  isSelected={card.id === selectedCardId}
+                  key={card.id}
+                  onOpenCard={onOpenCard}
+                />
               ))}
+            {cards.filter((card) => card.status === statusValue).length ? null : (
+              <p className="empty-column">No matching cards</p>
+            )}
           </div>
         </div>
       ))}
@@ -1320,10 +1703,10 @@ function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard }) {
   );
 }
 
-function ProjectCardButton({ card, cards, onOpenCard }) {
+function ProjectCardButton({ card, cards, isSelected, onOpenCard }) {
   return (
     <button
-      className="project-card"
+      className={isSelected ? "project-card keyboard-selected" : "project-card"}
       draggable
       type="button"
       onClick={() => onOpenCard(card)}
@@ -1336,12 +1719,75 @@ function ProjectCardButton({ card, cards, onOpenCard }) {
       <strong>{card.title}</strong>
       {card.description ? <p>{card.description}</p> : null}
       <span className="relationship-label">{cardRelationshipLabel(card, cards)}</span>
+      <IssueMarker card={card} cards={cards} />
       <footer>
         {card.start_date ? <span>Start {card.start_date}</span> : null}
         {card.due_date ? <span>Due {card.due_date}</span> : <span>No due date</span>}
         <span>{card.deliverables.length} deliverables</span>
       </footer>
     </button>
+  );
+}
+
+function IssueMarker({ card, cards, compact = false }) {
+  const issues = cardDependencyIssues(card, cards);
+  if (!issues.length) return null;
+  return (
+    <span className={compact ? "issue-badge compact" : "issue-badge"}>
+      {issues.length} issue{issues.length === 1 ? "" : "s"}
+    </span>
+  );
+}
+
+function ProjectIssues({ cards, onOpenCard, project }) {
+  const issueGroups = projectIssuesForCards(cards);
+  const blockedCount = issueGroups.reduce(
+    (total, group) => total + group.issues.filter((issue) => issue.type === "blocked_dependency").length,
+    0,
+  );
+  const dateConflictCount = issueGroups.reduce(
+    (total, group) => total + group.issues.filter((issue) => issue.type === "date_conflict").length,
+    0,
+  );
+
+  if (!project) {
+    return <div className="overview-panel empty-overview">Create or select a project to see dependency issues.</div>;
+  }
+
+  return (
+    <section className="overview-workspace">
+      <div className="overview-summary-grid">
+        <MetricTile label="Cards With Issues" tone={issueGroups.length ? "danger" : ""} value={issueGroups.length} />
+        <MetricTile label="Blocked Dependencies" tone={blockedCount ? "danger" : ""} value={blockedCount} />
+        <MetricTile label="Date Conflicts" tone={dateConflictCount ? "danger" : ""} value={dateConflictCount} />
+      </div>
+
+      <section className="overview-panel issues-panel">
+        <header>
+          <h2>Issues</h2>
+          <span>{project.name}</span>
+        </header>
+        {issueGroups.length ? (
+          <div className="issues-list">
+            {issueGroups.map(({ card, issues }) => (
+              <button className="issue-row" key={card.id} type="button" onClick={() => onOpenCard(card)}>
+                <div>
+                  <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
+                  <strong>{card.title}</strong>
+                </div>
+                <ul>
+                  {issues.map((issue) => (
+                    <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
+                  ))}
+                </ul>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-overview">No blocked dependencies or date conflicts.</p>
+        )}
+      </section>
+    </section>
   );
 }
 
@@ -1473,6 +1919,7 @@ function RoadmapEpic({ cards, epic, onOpenCard }) {
         <div>
           <span className={`card-type ${epic.card_type}`}>{cardTypeLabels[epic.card_type]}</span>
           <strong>{epic.title}</strong>
+          <IssueMarker card={epic} cards={cards} />
           {epic.description ? <p>{epic.description}</p> : null}
         </div>
         <ProjectSummaryChips summary={summary} />
@@ -1498,6 +1945,7 @@ function RoadmapFeature({ cards, feature, onOpenCard }) {
         <div>
           <span className={`card-type ${feature.card_type}`}>{cardTypeLabels[feature.card_type]}</span>
           <strong>{feature.title}</strong>
+          <IssueMarker card={feature} cards={cards} />
         </div>
         <ProjectSummaryChips summary={summary} />
       </button>
@@ -1510,6 +1958,7 @@ function RoadmapFeature({ cards, feature, onOpenCard }) {
               <button className="roadmap-story" key={story.id} type="button" onClick={() => onOpenCard(story)}>
                 <span className={`card-type ${story.card_type}`}>{cardTypeLabels[story.card_type]}</span>
                 <strong>{story.title}</strong>
+                <IssueMarker card={story} cards={cards} />
                 <footer>
                   <span>{statusLabels[story.status]}</span>
                   {story.start_date ? <span>Start {story.start_date}</span> : null}
@@ -1549,6 +1998,7 @@ function ProjectTimeline({ cards, onOpenCard, project }) {
               <span className={point.kind === "Due" ? "timeline-kind due" : "timeline-kind"}>{point.kind}</span>
               <span className={`card-type ${point.card.card_type}`}>{cardTypeLabels[point.card.card_type]}</span>
               <strong>{point.card.title}</strong>
+              <IssueMarker card={point.card} cards={cards} compact />
               <span>{statusLabels[point.card.status]}</span>
             </button>
           ))}
@@ -1598,6 +2048,7 @@ function ProjectGantt({ cards, onOpenCard, project }) {
                 <div>
                   <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
                   <strong>{card.title}</strong>
+                  <IssueMarker card={card} cards={cards} compact />
                 </div>
                 <div className="gantt-track">
                   <span
@@ -1662,6 +2113,7 @@ function ProjectCalendar({ cards, onOpenCard, project }) {
                   <button className="calendar-card" key={`${day}-${card.id}`} type="button" onClick={() => onOpenCard(card)}>
                     <span>{card.start_date === day ? "Start" : "Due"}</span>
                     <strong>{card.title}</strong>
+                    <IssueMarker card={card} cards={cards} compact />
                   </button>
                 ))}
               </div>
@@ -1791,15 +2243,27 @@ function ProjectEditor({ cards, onCancel, onChange, onCreateEpic, onDelete, onOp
   );
 }
 
-function CardEditor({ card, cards, onCancel, onChange, onCreateChild, onDelete, onSubmit }) {
+function CardEditor({ card, cards, onAssignToPlanner, onCancel, onChange, onCreateChild, onDelete, onSubmit }) {
+  const defaultPlannerDate = card.due_date || card.start_date || formatDateInput(new Date());
+  const [plannerDate, setPlannerDate] = useState(defaultPlannerDate);
+  const [plannerAssignStatus, setPlannerAssignStatus] = useState("");
+  const [isAssigningPlanner, setIsAssigningPlanner] = useState(false);
   const expectedParentType = parentTypeByCardType[card.card_type];
   const childType = childTypeByCardType[card.card_type];
   const parentCard = cards.find((candidate) => candidate.id === card.parent_id);
   const childCards = card.id ? cards.filter((candidate) => candidate.parent_id === card.id) : [];
+  const dependencyIds = card.dependency_ids || [];
+  const dependencyOptions = cards.filter((candidate) => candidate.id !== card.id);
+  const dependencyIssues = cardDependencyIssues(card, cards);
   const parentOptions = cards.filter(
     (candidate) => candidate.id !== card.id && candidate.card_type === expectedParentType,
   );
   const deliverables = card.deliverables.length ? card.deliverables : [""];
+
+  useEffect(() => {
+    setPlannerDate(defaultPlannerDate);
+    setPlannerAssignStatus("");
+  }, [card.id, defaultPlannerDate]);
 
   function updateField(field, value) {
     onChange({ ...card, [field]: value });
@@ -1828,6 +2292,23 @@ function CardEditor({ card, cards, onCancel, onChange, onCreateChild, onDelete, 
   function removeDeliverable(index) {
     const next = deliverables.filter((_, itemIndex) => itemIndex !== index);
     onChange({ ...card, deliverables: next.length ? next : [""] });
+  }
+
+  function toggleDependency(dependencyId) {
+    onChange({
+      ...card,
+      dependency_ids: dependencyIds.includes(dependencyId)
+        ? dependencyIds.filter((item) => item !== dependencyId)
+        : [...dependencyIds, dependencyId],
+    });
+  }
+
+  async function assignToPlanner() {
+    setIsAssigningPlanner(true);
+    setPlannerAssignStatus("");
+    const result = await onAssignToPlanner(card, plannerDate);
+    setPlannerAssignStatus(result.message);
+    setIsAssigningPlanner(false);
   }
 
   return (
@@ -1921,6 +2402,80 @@ function CardEditor({ card, cards, onCancel, onChange, onCreateChild, onDelete, 
               <strong>{cardTypeLabels[childType]}</strong>
             </div>
           ) : null}
+        </section>
+
+        <section className="planner-assignment-panel">
+          <header>
+            <div>
+              <CalendarDays size={18} />
+              <h3>Planner Assignment</h3>
+            </div>
+            <span>Priority slot</span>
+          </header>
+          <div>
+            <label>
+              <span>Date</span>
+              <input
+                min={formatDateInput(new Date())}
+                type="date"
+                value={plannerDate}
+                onChange={(event) => setPlannerDate(event.target.value)}
+              />
+            </label>
+            <button
+              className="secondary-button"
+              disabled={isAssigningPlanner || !card.title.trim() || !plannerDate}
+              type="button"
+              onClick={assignToPlanner}
+            >
+              <CalendarDays size={18} />
+              <span>{isAssigningPlanner ? "Assigning" : "Assign"}</span>
+            </button>
+          </div>
+          {plannerAssignStatus ? <p>{plannerAssignStatus}</p> : null}
+        </section>
+
+        {dependencyIssues.length ? (
+          <section className="card-warning-panel">
+            <header>
+              <AlertCircle size={18} />
+              <h3>Dependency Warnings</h3>
+            </header>
+            <ul>
+              {dependencyIssues.map((issue) => (
+                <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <section className="dependencies-editor">
+          <header>
+            <div>
+              <GitBranch size={18} />
+              <h3>Dependencies</h3>
+            </div>
+            <span>{dependencyIds.length} linked</span>
+          </header>
+          {dependencyOptions.length ? (
+            <div className="dependency-list">
+              {dependencyOptions.map((dependency) => (
+                <label className="dependency-option" key={dependency.id}>
+                  <input
+                    checked={dependencyIds.includes(dependency.id)}
+                    type="checkbox"
+                    onChange={() => toggleDependency(dependency.id)}
+                  />
+                  <span className={`card-type ${dependency.card_type}`}>{cardTypeLabels[dependency.card_type]}</span>
+                  <strong>{dependency.title}</strong>
+                  <span>{statusLabels[dependency.status]}</span>
+                  {dependency.due_date ? <span>Due {dependency.due_date}</span> : <span>No due date</span>}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="empty-overview">No other cards available.</p>
+          )}
         </section>
 
         {childType ? (
