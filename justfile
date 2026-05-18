@@ -1,3 +1,5 @@
+container_compose := env_var_or_default("CONTAINER_COMPOSE", "docker compose")
+
 # List available recipes
 default:
     @just --list
@@ -34,17 +36,69 @@ dev:
     trap 'exit 0' INT TERM
     wait -n "$api_pid" "$web_pid"
 
-# Build and run the hosted Docker Compose app
+# Build and run the hosted container app; set CONTAINER_COMPOSE='podman compose' to switch engines
+host-up:
+    {{container_compose}} up --build
+
+# Stop the hosted container app
+host-down:
+    {{container_compose}} down
+
+# Stop the hosted container app and remove its local database volume
+host-reset:
+    {{container_compose}} down --volumes
+
+# Build the hosted container image without starting it
+host-build:
+    {{container_compose}} build
+
+# Show hosted container logs
+host-logs:
+    {{container_compose}} logs -f
+
+# Show hosted container status
+host-ps:
+    {{container_compose}} ps
+
+# Build and run the hosted app with Docker Compose
 docker-up:
-    docker compose up --build
+    CONTAINER_COMPOSE='docker compose' just host-up
 
 # Stop the hosted Docker Compose app
 docker-down:
-    docker compose down
+    CONTAINER_COMPOSE='docker compose' just host-down
 
-# Show hosted Docker Compose logs
+# Stop Docker Compose and remove its local database volume
+docker-reset:
+    CONTAINER_COMPOSE='docker compose' just host-reset
+
+# Build the hosted app with Docker Compose
+docker-build:
+    CONTAINER_COMPOSE='docker compose' just host-build
+
+# Show Docker Compose logs
 docker-logs:
-    docker compose logs -f
+    CONTAINER_COMPOSE='docker compose' just host-logs
+
+# Build and run the hosted app with Podman Compose
+podman-up:
+    CONTAINER_COMPOSE='podman compose' just host-up
+
+# Stop the hosted Podman Compose app
+podman-down:
+    CONTAINER_COMPOSE='podman compose' just host-down
+
+# Stop Podman Compose and remove its local database volume
+podman-reset:
+    CONTAINER_COMPOSE='podman compose' just host-reset
+
+# Build the hosted app with Podman Compose
+podman-build:
+    CONTAINER_COMPOSE='podman compose' just host-build
+
+# Show Podman Compose logs
+podman-logs:
+    CONTAINER_COMPOSE='podman compose' just host-logs
 
 # Build the React frontend
 web-build:

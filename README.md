@@ -23,27 +23,52 @@ A simple daily planner and project management app with a Python [Textual](https:
 
 ## Quickstart
 
-### Docker Hosting
+### Local Container Hosting
 
-On another computer with Docker installed:
+On another computer with Docker or Podman installed:
 
 ```bash
 cp .env.example .env
-docker compose up --build
+just host-up
 ```
 
 Open `http://localhost:8080`.
 
-Each computer gets its own databases in that computer's Docker named volume, `daily_planner_data`. The container stores planner data at `/data/planner.db` and project data at `/data/project_mgmt.db`. To stop the app while keeping the databases:
+`just host-up` uses Docker Compose by default. To use Podman Compose instead:
 
 ```bash
-docker compose down
+just podman-up
 ```
 
-To remove that computer's hosted databases as well:
+Or set the compose command explicitly:
 
 ```bash
-docker compose down --volumes
+CONTAINER_COMPOSE='podman compose' just host-up
+```
+
+Docker-specific shortcuts are also available:
+
+```bash
+just docker-up
+```
+
+Each computer gets its own databases in that computer's local named volume, `daily_planner_data`. The container stores planner data at `/data/planner.db` and project data at `/data/project_mgmt.db`. To stop the app while keeping the databases:
+
+```bash
+just host-down
+```
+
+Use the matching engine-specific stop command if needed:
+
+```bash
+just docker-down
+just podman-down
+```
+
+To intentionally remove that computer's hosted databases, stop with the reset recipe:
+
+```bash
+just host-reset
 ```
 
 Change the host port by editing `.env`:
@@ -52,16 +77,16 @@ Change the host port by editing `.env`:
 DAILY_PLANNER_PORT=8081
 ```
 
-With `just`, the same hosted app can be run with:
+Without `just`, run the compose tool directly:
 
 ```bash
-just docker-up
+docker compose up --build
 ```
 
-Stop it with:
+or:
 
 ```bash
-just docker-down
+podman compose up --build
 ```
 
 ### Local Development
@@ -130,7 +155,7 @@ Then open the Vite URL shown in the terminal, usually `http://127.0.0.1:5173`.
 
 The TUI and web planner both create or update `planner.db` in the directory where they are run. The TUI and web project manager both create or update `project_mgmt.db`. Set `PLANNER_DB_PATH` and `PROJECT_MGMT_DB_PATH` to override those paths.
 
-For Docker Compose hosting, the app uses `/data/planner.db` and `/data/project_mgmt.db` inside the container and persists them in the local Docker volume `daily_planner_data`.
+For local container hosting, the app uses `/data/planner.db` and `/data/project_mgmt.db` inside the container and persists them in the local named volume `daily_planner_data`. Docker and Podman keep their own local volume stores, so each computer and container engine has separate data by default.
 
 List available task shortcuts:
 
@@ -269,9 +294,22 @@ Available `just` recipes:
 | `just` | List all available recipes |
 | `just test` | Run the Python test suite |
 | `just dev` | Run the API and React development servers together |
+| `just host-up` | Build and run the hosted container app using `CONTAINER_COMPOSE`, defaulting to Docker Compose |
+| `just host-down` | Stop the hosted container app |
+| `just host-reset` | Stop the hosted container app and remove its local database volume |
+| `just host-build` | Build the hosted container image |
+| `just host-logs` | Follow hosted container logs |
+| `just host-ps` | Show hosted container status |
 | `just docker-up` | Build and run the Docker Compose hosted app |
 | `just docker-down` | Stop the Docker Compose hosted app |
+| `just docker-reset` | Stop Docker Compose and remove its local database volume |
+| `just docker-build` | Build the Docker Compose hosted app |
 | `just docker-logs` | Follow Docker Compose logs |
+| `just podman-up` | Build and run the Podman Compose hosted app |
+| `just podman-down` | Stop the Podman Compose hosted app |
+| `just podman-reset` | Stop Podman Compose and remove its local database volume |
+| `just podman-build` | Build the Podman Compose hosted app |
+| `just podman-logs` | Follow Podman Compose logs |
 | `just api` | Run the FastAPI development server |
 | `just web` | Run the React development server |
 | `just tui` | Run the terminal planner |
