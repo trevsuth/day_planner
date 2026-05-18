@@ -1,11 +1,22 @@
-import sqlite3
 import json
+import os
+import sqlite3
+from pathlib import Path
 from typing import Optional
+
 from app_planner.models import PlannerEntry, Task
 
 
+def database_path() -> str:
+    return os.environ.get("PLANNER_DB_PATH", "planner.db")
+
+
 def get_connection():
-    return sqlite3.connect("planner.db")
+    db_path = database_path()
+    parent = Path(db_path).parent
+    if str(parent) != ".":
+        parent.mkdir(parents=True, exist_ok=True)
+    return sqlite3.connect(db_path)
 
 
 def init_db():

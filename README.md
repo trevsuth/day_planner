@@ -18,9 +18,53 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Card comments with Markdown preview and Mermaid/MMD fenced block support
 - Project deletion from the Projects sidebar
 - FastAPI JSON API for web access
+- Docker Compose hosting with per-machine persisted SQLite databases
 - Optional standalone executable build with PyInstaller
 
 ## Quickstart
+
+### Docker Hosting
+
+On another computer with Docker installed:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Open `http://localhost:8080`.
+
+Each computer gets its own databases in that computer's Docker named volume, `daily_planner_data`. The container stores planner data at `/data/planner.db` and project data at `/data/project_mgmt.db`. To stop the app while keeping the databases:
+
+```bash
+docker compose down
+```
+
+To remove that computer's hosted databases as well:
+
+```bash
+docker compose down --volumes
+```
+
+Change the host port by editing `.env`:
+
+```bash
+DAILY_PLANNER_PORT=8081
+```
+
+With `just`, the same hosted app can be run with:
+
+```bash
+just docker-up
+```
+
+Stop it with:
+
+```bash
+just docker-down
+```
+
+### Local Development
 
 From the repository root:
 
@@ -84,7 +128,9 @@ just dev
 
 Then open the Vite URL shown in the terminal, usually `http://127.0.0.1:5173`.
 
-The TUI and web planner both create or update `planner.db` in the directory where they are run. The TUI and web project manager both create or update `project_mgmt.db`.
+The TUI and web planner both create or update `planner.db` in the directory where they are run. The TUI and web project manager both create or update `project_mgmt.db`. Set `PLANNER_DB_PATH` and `PROJECT_MGMT_DB_PATH` to override those paths.
+
+For Docker Compose hosting, the app uses `/data/planner.db` and `/data/project_mgmt.db` inside the container and persists them in the local Docker volume `daily_planner_data`.
 
 List available task shortcuts:
 
@@ -223,6 +269,9 @@ Available `just` recipes:
 | `just` | List all available recipes |
 | `just test` | Run the Python test suite |
 | `just dev` | Run the API and React development servers together |
+| `just docker-up` | Build and run the Docker Compose hosted app |
+| `just docker-down` | Stop the Docker Compose hosted app |
+| `just docker-logs` | Follow Docker Compose logs |
 | `just api` | Run the FastAPI development server |
 | `just web` | Run the React development server |
 | `just tui` | Run the terminal planner |

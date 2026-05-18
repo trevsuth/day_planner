@@ -34,6 +34,18 @@ dev:
     trap 'exit 0' INT TERM
     wait -n "$api_pid" "$web_pid"
 
+# Build and run the hosted Docker Compose app
+docker-up:
+    docker compose up --build
+
+# Stop the hosted Docker Compose app
+docker-down:
+    docker compose down
+
+# Show hosted Docker Compose logs
+docker-logs:
+    docker compose logs -f
+
 # Build the React frontend
 web-build:
     npm --prefix web run build

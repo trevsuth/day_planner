@@ -1,12 +1,22 @@
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app_projmgmt.models import Project, ProjectCard, ProjectCardCreate, ProjectCreate
 
 
+def database_path() -> str:
+    return os.environ.get("PROJECT_MGMT_DB_PATH", "project_mgmt.db")
+
+
 def get_connection():
-    conn = sqlite3.connect("project_mgmt.db")
+    db_path = database_path()
+    parent = Path(db_path).parent
+    if str(parent) != ".":
+        parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

@@ -16,14 +16,6 @@
    - Replace ad hoc schema updates with ordered migrations
    - Track applied migration version
    - Add migration tests for existing planner and project databases
-3. Add Docker Compose hosting
-   - Create API and web Dockerfiles
-   - Serve the built React app through a production web container
-   - Proxy `/api` requests to FastAPI inside the compose network
-   - Persist the app database in a named Docker volume
-   - Add `.env.example` and README quickstart for `docker compose up --build`
-   - Add healthchecks and document backup/restore expectations
-
 ## 2. Project Manager
 
 1. [x] Add project filters and search
@@ -100,7 +92,7 @@
    - Expose projects and cards
    - Support safe create/update actions
 4. Add structured application settings
-   - Configure database paths
+   - [x] Configure database paths
    - Configure CORS/frontend hostnames
    - Share settings between local, packaged, and Docker runs
 
@@ -113,3 +105,4 @@
 5. [x] Enable drag and drop of cards between columns in Kanban
 6. [x] Enable Markdown/MMD support in card comments
 7. [x] Add API Reference tab
+8. [x] Add Docker Compose hosting

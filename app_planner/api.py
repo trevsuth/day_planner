@@ -36,6 +36,11 @@ def startup() -> None:
     init_project_db()
 
 
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 def empty_entry(entry_date: date) -> PlannerEntry:
     return PlannerEntry(entry_date=entry_date)
 
