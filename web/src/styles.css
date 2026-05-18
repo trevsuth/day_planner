@@ -123,6 +123,10 @@ button:disabled {
   align-items: center;
 }
 
+.api-topbar {
+  align-items: center;
+}
+
 .eyebrow {
   display: flex;
   align-items: center;
@@ -213,6 +217,10 @@ h3 {
   color: var(--text);
 }
 
+.api-doc-link {
+  text-decoration: none;
+}
+
 .date-controls input {
   width: 152px;
   padding: 0 10px;
@@ -241,6 +249,127 @@ h3 {
   grid-auto-rows: minmax(310px, auto);
   gap: 14px;
   margin-top: 10px;
+}
+
+.api-reference-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.api-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 32%),
+    var(--panel);
+  box-shadow:
+    0 16px 34px var(--shadow),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+
+.api-overview dl {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.api-overview dl div {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.api-overview dt,
+.api-endpoint p,
+.api-rule-list {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.api-overview dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--line-strong);
+  overflow-wrap: anywhere;
+}
+
+.api-endpoints {
+  grid-column: span 2;
+}
+
+.api-endpoints > div {
+  display: grid;
+  gap: 8px;
+}
+
+.api-endpoint {
+  display: grid;
+  grid-template-columns: 82px minmax(220px, 0.72fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid rgba(91, 210, 234, 0.18);
+  background: rgba(4, 13, 18, 0.52);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.api-endpoint code,
+.api-code {
+  color: var(--text);
+}
+
+.api-endpoint p {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.api-method {
+  width: fit-content;
+  min-width: 68px;
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.api-method.get {
+  color: var(--line-strong);
+}
+
+.api-method.post {
+  color: var(--green);
+}
+
+.api-method.put {
+  color: var(--amber);
+}
+
+.api-method.delete {
+  color: var(--danger);
+}
+
+.api-code {
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(91, 210, 234, 0.24);
+  background: rgba(1, 6, 9, 0.82);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.api-rule-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding-left: 18px;
 }
 
 .panel,
@@ -1275,6 +1404,17 @@ textarea {
   }
 
   .planner-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .api-reference-grid,
+  .api-endpoints {
+    grid-template-columns: 1fr;
+    grid-column: auto;
+  }
+
+  .api-endpoint,
+  .api-overview dl div {
     grid-template-columns: 1fr;
   }
 
