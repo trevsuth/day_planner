@@ -1822,33 +1822,35 @@ function ProjectsApp() {
         </button>
       </nav>
 
-      <ProjectFilters
-        filters={projectFilters}
-        hasActiveFilters={hasActiveFilters}
-        isOpen={isFilterPanelOpen}
-        onClear={clearProjectFilters}
-        onQueryChange={(value) => updateProjectFilter("query", value)}
-        onScheduleChange={(value) => updateProjectFilter("schedule", value)}
-        onToggleOpen={() => setIsFilterPanelOpen((current) => !current)}
-        onToggleCardType={(value) => toggleProjectFilter("cardTypes", value)}
-        onToggleStatus={(value) => toggleProjectFilter("statuses", value)}
-        resultCount={filteredCards.length}
-        searchInputRef={searchInputRef}
-        totalCount={cards.length}
-      />
+      <div className="project-controls-strip">
+        <ProjectFilters
+          filters={projectFilters}
+          hasActiveFilters={hasActiveFilters}
+          isOpen={isFilterPanelOpen}
+          onClear={clearProjectFilters}
+          onQueryChange={(value) => updateProjectFilter("query", value)}
+          onScheduleChange={(value) => updateProjectFilter("schedule", value)}
+          onToggleOpen={() => setIsFilterPanelOpen((current) => !current)}
+          onToggleCardType={(value) => toggleProjectFilter("cardTypes", value)}
+          onToggleStatus={(value) => toggleProjectFilter("statuses", value)}
+          resultCount={filteredCards.length}
+          searchInputRef={searchInputRef}
+          totalCount={cards.length}
+        />
 
-      <BulkEditPanel
-        bulkDraft={bulkDraft}
-        cards={cards}
-        filteredCards={filteredCards}
-        isOpen={isBulkEditOpen}
-        onApply={applyBulkEdits}
-        onClearSelection={() => setSelectedBulkCardIds([])}
-        onSelectAll={selectAllFilteredCards}
-        onToggleOpen={() => setIsBulkEditOpen((current) => !current)}
-        onUpdateDraft={(field, value) => setBulkDraft((current) => ({ ...current, [field]: value }))}
-        selectedCards={selectedBulkCards}
-      />
+        <BulkEditPanel
+          bulkDraft={bulkDraft}
+          cards={cards}
+          filteredCards={filteredCards}
+          isOpen={isBulkEditOpen}
+          onApply={applyBulkEdits}
+          onClearSelection={() => setSelectedBulkCardIds([])}
+          onSelectAll={selectAllFilteredCards}
+          onToggleOpen={() => setIsBulkEditOpen((current) => !current)}
+          onUpdateDraft={(field, value) => setBulkDraft((current) => ({ ...current, [field]: value }))}
+          selectedCards={selectedBulkCards}
+        />
+      </div>
 
       <div className="projects-layout">
         {projectView === "portfolio" ? (
