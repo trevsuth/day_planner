@@ -81,7 +81,7 @@ const cardTypeOrder = {
   subtask: 3,
 };
 
-const PROJECT_VIEWS = ["portfolio", "issues", "roadmap", "timeline", "gantt", "calendar", "board"];
+const PROJECT_VIEWS = ["portfolio", "issues", "graph", "roadmap", "timeline", "gantt", "calendar", "board"];
 
 const projectCardCsvHeaders = [
   "Project Name",
@@ -262,6 +262,21 @@ function normalizeCardType(value) {
 function normalizeCardStatus(value) {
   const normalized = value.trim().toLowerCase();
   return STATUSES.find((status) => status === normalized || statusLabels[status].toLowerCase() === normalized) || "backlog";
+}
+
+function cardPayload(card, overrides = {}) {
+  return {
+    card_type: overrides.card_type ?? card.card_type,
+    title: overrides.title ?? card.title,
+    description: overrides.description ?? card.description ?? null,
+    comments: overrides.comments ?? card.comments ?? null,
+    status: overrides.status ?? card.status,
+    start_date: overrides.start_date ?? card.start_date ?? null,
+    due_date: overrides.due_date ?? card.due_date ?? null,
+    parent_id: overrides.parent_id ?? card.parent_id ?? null,
+    dependency_ids: overrides.dependency_ids ?? card.dependency_ids ?? [],
+    deliverables: overrides.deliverables ?? card.deliverables ?? [],
+  };
 }
 
 function safeFilePart(value) {
@@ -542,6 +557,34 @@ function projectIssuesForCards(cards) {
       issues: cardDependencyIssues(card, cards),
     }))
     .filter((item) => item.issues.length);
+}
+
+function dependencyDependentsFor(cardId, cards) {
+  return cards.filter((card) => (card.dependency_ids || []).includes(cardId));
+}
+
+function cardCanChangeType(card, nextType, cards) {
+  if (card.card_type === nextType) return true;
+  if (cards.some((candidate) => candidate.parent_id === card.id)) return false;
+
+  const expectedParentType = parentTypeByCardType[nextType];
+  if (!expectedParentType) return !card.parent_id;
+
+  const parent = cards.find((candidate) => candidate.id === card.parent_id);
+  return parent?.card_type === expectedParentType;
+}
+
+function dependencyEdgesForCards(cards) {
+  return cards.flatMap((card) =>
+    (card.dependency_ids || [])
+      .map((dependencyId) => {
+        const dependency = cards.find((candidate) => candidate.id === dependencyId);
+        if (!dependency) return null;
+        const issues = cardDependencyIssues(card, cards).filter((issue) => issue.dependency.id === dependency.id);
+        return { dependency, dependent: card, issues };
+      })
+      .filter(Boolean),
+  );
 }
 
 function summarizeCards(cards) {
@@ -860,8 +903,16 @@ function ProjectsApp() {
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
   const [previewCard, setPreviewCard] = useState(null);
+  const [selectedBulkCardIds, setSelectedBulkCardIds] = useState([]);
+  const [bulkDraft, setBulkDraft] = useState({
+    status: "",
+    start_date: "",
+    due_date: "",
+    card_type: "",
+  });
   const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(Boolean(storedProjectState.isProjectSwitcherOpen));
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(Boolean(storedProjectState.isFilterPanelOpen));
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(Boolean(storedProjectState.isBulkEditOpen));
   const [isCsvMenuOpen, setIsCsvMenuOpen] = useState(false);
   const [status, setStatus] = useState("Loading");
   const [error, setError] = useState("");
@@ -874,6 +925,7 @@ function ProjectsApp() {
   const selectedCardActivity = selectedCardId ? cardActivityById[selectedCardId] || [] : [];
   const previewCardId = previewCard?.id || "";
   const filteredCards = cards.filter((card) => cardMatchesFilters(card, projectFilters));
+  const selectedBulkCards = cards.filter((card) => selectedBulkCardIds.includes(card.id));
   const activeProjectSummary = summarizeCards(cards);
   const activeProjectIssueCount = projectIssuesForCards(cards).length;
   const filteredProjectCardsById = Object.fromEntries(
@@ -916,15 +968,20 @@ function ProjectsApp() {
         projectFilters,
         isProjectSwitcherOpen,
         isFilterPanelOpen,
+        isBulkEditOpen,
       }),
     );
-  }, [activeProjectId, isFilterPanelOpen, isProjectSwitcherOpen, projectFilters, projectView]);
+  }, [activeProjectId, isBulkEditOpen, isFilterPanelOpen, isProjectSwitcherOpen, projectFilters, projectView]);
 
   useEffect(() => {
     if (!previewCardId) return;
     const updatedCard = cards.find((card) => card.id === previewCardId);
     setPreviewCard(updatedCard || null);
   }, [cards, previewCardId]);
+
+  useEffect(() => {
+    setSelectedBulkCardIds((current) => current.filter((cardId) => cards.some((card) => card.id === cardId)));
+  }, [cards]);
 
   useEffect(() => {
     if (!filteredCards.length) {
@@ -1220,7 +1277,68 @@ function ProjectsApp() {
 
   function openKeyboardCard() {
     const card = filteredCards.find((candidate) => candidate.id === keyboardCardId) || filteredCards[0];
-        if (card) setPreviewCard(card);
+    if (card) setPreviewCard(card);
+  }
+
+  function updateCardsAfterSave(savedCards) {
+    setCards((current) =>
+      current.map((card) => savedCards.find((saved) => saved.id === card.id) || card),
+    );
+    setProjectCardsById((current) => {
+      const next = { ...current };
+      for (const saved of savedCards) {
+        next[saved.project_id] = (next[saved.project_id] || []).map((card) => (card.id === saved.id ? saved : card));
+      }
+      return next;
+    });
+    setPreviewCard((current) => (current ? savedCards.find((saved) => saved.id === current.id) || current : current));
+  }
+
+  function toggleBulkCard(cardId) {
+    setSelectedBulkCardIds((current) =>
+      current.includes(cardId) ? current.filter((id) => id !== cardId) : [...current, cardId],
+    );
+  }
+
+  function selectAllFilteredCards() {
+    setSelectedBulkCardIds(filteredCards.map((card) => card.id));
+  }
+
+  async function applyBulkEdits() {
+    const targetCards = selectedBulkCards.length ? selectedBulkCards : filteredCards;
+    if (!targetCards.length) return;
+
+    const updates = {};
+    if (bulkDraft.status) updates.status = bulkDraft.status;
+    if (bulkDraft.start_date) updates.start_date = bulkDraft.start_date;
+    if (bulkDraft.due_date) updates.due_date = bulkDraft.due_date;
+    if (bulkDraft.card_type) updates.card_type = bulkDraft.card_type;
+    if (!Object.keys(updates).length) return;
+
+    const eligibleCards = updates.card_type
+      ? targetCards.filter((card) => cardCanChangeType(card, updates.card_type, cards))
+      : targetCards;
+    if (!eligibleCards.length) {
+      setError("No selected cards can be changed to that type with the current hierarchy.");
+      return;
+    }
+
+    try {
+      const savedCards = [];
+      for (const card of eligibleCards) {
+        const saved = await request(`/api/projmgmt/cards/${card.id}`, {
+          method: "PUT",
+          body: JSON.stringify(cardPayload(card, updates)),
+        });
+        savedCards.push(saved);
+      }
+      updateCardsAfterSave(savedCards);
+      setBulkDraft({ status: "", start_date: "", due_date: "", card_type: "" });
+      setError("");
+      setStatus(`Updated ${savedCards.length} card${savedCards.length === 1 ? "" : "s"}`);
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   async function saveCard(event) {
@@ -1352,29 +1470,14 @@ function ProjectsApp() {
   async function moveCardToStatus(card, nextStatus) {
     if (!card || card.status === nextStatus) return;
 
-    const payload = {
-      card_type: card.card_type,
-      title: card.title,
-      description: card.description || null,
-      comments: card.comments || null,
-      status: nextStatus,
-      start_date: card.start_date || null,
-      due_date: card.due_date || null,
-      parent_id: card.parent_id || null,
-      dependency_ids: card.dependency_ids || [],
-      deliverables: card.deliverables || [],
-    };
+    const payload = cardPayload(card, { status: nextStatus });
 
     try {
       const saved = await request(`/api/projmgmt/cards/${card.id}`, {
         method: "PUT",
         body: JSON.stringify(payload),
       });
-      setCards((current) => current.map((item) => (item.id === saved.id ? saved : item)));
-      setProjectCardsById((current) => ({
-        ...current,
-        [saved.project_id]: (current[saved.project_id] || []).map((item) => (item.id === saved.id ? saved : item)),
-      }));
+      updateCardsAfterSave([saved]);
       setError("");
       setStatus(`Moved to ${statusLabels[nextStatus]}`);
     } catch (err) {
@@ -1693,6 +1796,10 @@ function ProjectsApp() {
           <AlertCircle size={17} />
           <span>Issues</span>
         </button>
+        <button className={projectView === "graph" ? "active" : ""} type="button" onClick={() => setProjectView("graph")}>
+          <GitBranch size={17} />
+          <span>Graph</span>
+        </button>
         <button className={projectView === "roadmap" ? "active" : ""} type="button" onClick={() => setProjectView("roadmap")}>
           <MapIcon size={17} />
           <span>Roadmap</span>
@@ -1730,6 +1837,19 @@ function ProjectsApp() {
         totalCount={cards.length}
       />
 
+      <BulkEditPanel
+        bulkDraft={bulkDraft}
+        cards={cards}
+        filteredCards={filteredCards}
+        isOpen={isBulkEditOpen}
+        onApply={applyBulkEdits}
+        onClearSelection={() => setSelectedBulkCardIds([])}
+        onSelectAll={selectAllFilteredCards}
+        onToggleOpen={() => setIsBulkEditOpen((current) => !current)}
+        onUpdateDraft={(field, value) => setBulkDraft((current) => ({ ...current, [field]: value }))}
+        selectedCards={selectedBulkCards}
+      />
+
       <div className="projects-layout">
         {projectView === "portfolio" ? (
           <PortfolioOverview
@@ -1761,13 +1881,19 @@ function ProjectsApp() {
           />
         ) : null}
 
+        {projectView === "graph" ? (
+          <DependencyGraph cards={filteredCards} onOpenCard={setPreviewCard} onStartNewCard={startNewCard} project={activeProject} />
+        ) : null}
+
         {projectView === "board" ? (
           <ProjectBoard
             cards={filteredCards}
             onMoveCard={moveCardToStatus}
             onOpenCard={setPreviewCard}
             onStartNewCard={startNewCard}
+            onToggleBulkCard={toggleBulkCard}
             selectedCardId={previewCard?.id || keyboardCardId}
+            selectedBulkCardIds={selectedBulkCardIds}
           />
         ) : null}
 
@@ -2187,7 +2313,100 @@ function ProjectFilters({
   );
 }
 
-function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard, selectedCardId }) {
+function BulkEditPanel({
+  bulkDraft,
+  cards,
+  filteredCards,
+  isOpen,
+  onApply,
+  onClearSelection,
+  onSelectAll,
+  onToggleOpen,
+  onUpdateDraft,
+  selectedCards,
+}) {
+  const hasDraft = Boolean(bulkDraft.status || bulkDraft.start_date || bulkDraft.due_date || bulkDraft.card_type);
+  const targetCount = selectedCards.length || filteredCards.length;
+  const typeEligibleCount = bulkDraft.card_type
+    ? (selectedCards.length ? selectedCards : filteredCards).filter((card) => cardCanChangeType(card, bulkDraft.card_type, cards)).length
+    : targetCount;
+
+  return (
+    <section className="bulk-edit-shell" aria-label="Bulk edit cards">
+      <button
+        className="bulk-edit-toggle"
+        type="button"
+        onClick={onToggleOpen}
+        aria-expanded={isOpen}
+      >
+        <span>Bulk Edit</span>
+        <strong>{selectedCards.length ? `${selectedCards.length} selected` : `${filteredCards.length} filtered`}</strong>
+        <span>{isOpen ? "Hide" : "Show"}</span>
+      </button>
+
+      {isOpen ? (
+        <div className="bulk-edit-panel">
+          <header>
+            <div>
+              <span>Targets</span>
+              <strong>{selectedCards.length ? "Selected cards" : "Filtered cards"}</strong>
+            </div>
+            <div>
+              <button className="secondary-button" type="button" onClick={onSelectAll} disabled={!filteredCards.length}>
+                Select Filtered
+              </button>
+              <button className="secondary-button" type="button" onClick={onClearSelection} disabled={!selectedCards.length}>
+                Clear
+              </button>
+            </div>
+          </header>
+
+          <div className="bulk-edit-controls">
+            <label>
+              <span>Status</span>
+              <select value={bulkDraft.status} onChange={(event) => onUpdateDraft("status", event.target.value)}>
+                <option value="">No change</option>
+                {STATUSES.map((statusValue) => (
+                  <option key={statusValue} value={statusValue}>
+                    {statusLabels[statusValue]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Start Date</span>
+              <input type="date" value={bulkDraft.start_date} onChange={(event) => onUpdateDraft("start_date", event.target.value)} />
+            </label>
+            <label>
+              <span>Due Date</span>
+              <input type="date" value={bulkDraft.due_date} onChange={(event) => onUpdateDraft("due_date", event.target.value)} />
+            </label>
+            <label>
+              <span>Type</span>
+              <select value={bulkDraft.card_type} onChange={(event) => onUpdateDraft("card_type", event.target.value)}>
+                <option value="">No change</option>
+                {CARD_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {cardTypeLabels[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="save-button" type="button" onClick={onApply} disabled={!targetCount || !hasDraft}>
+              Apply
+            </button>
+          </div>
+
+          {bulkDraft.card_type && typeEligibleCount !== targetCount ? (
+            <p>{targetCount - typeEligibleCount} card{targetCount - typeEligibleCount === 1 ? "" : "s"} will be skipped because the current hierarchy does not allow that type.</p>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard, onToggleBulkCard, selectedBulkCardIds, selectedCardId }) {
   const [dragOverStatus, setDragOverStatus] = useState("");
 
   function dropCard(event, statusValue) {
@@ -2227,6 +2446,8 @@ function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard, selectedC
                   isSelected={card.id === selectedCardId}
                   key={card.id}
                   onOpenCard={onOpenCard}
+                  onToggleBulkCard={onToggleBulkCard}
+                  selectedForBulk={selectedBulkCardIds.includes(card.id)}
                 />
               ))}
             {cards.filter((card) => card.status === statusValue).length ? null : (
@@ -2239,7 +2460,7 @@ function ProjectBoard({ cards, onMoveCard, onOpenCard, onStartNewCard, selectedC
   );
 }
 
-function ProjectCardButton({ card, cards, isSelected, onOpenCard }) {
+function ProjectCardButton({ card, cards, isSelected, onOpenCard, onToggleBulkCard, selectedForBulk }) {
   return (
     <button
       className={isSelected ? "project-card keyboard-selected" : "project-card"}
@@ -2251,6 +2472,14 @@ function ProjectCardButton({ card, cards, isSelected, onOpenCard }) {
         event.dataTransfer.setData("text/plain", card.id);
       }}
     >
+      <span className="bulk-select-control" onClick={(event) => event.stopPropagation()}>
+        <input
+          aria-label={`Select ${card.title} for bulk edit`}
+          checked={selectedForBulk}
+          type="checkbox"
+          onChange={() => onToggleBulkCard(card.id)}
+        />
+      </span>
       <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
       <strong>{card.title}</strong>
       {card.description ? <p>{card.description}</p> : null}
@@ -2369,6 +2598,69 @@ function IssueGroup({ actionLabel, groups, onAction, onOpenCard, title }) {
           </div>
         </article>
       ))}
+    </section>
+  );
+}
+
+function DependencyGraph({ cards, onOpenCard, onStartNewCard, project }) {
+  const edges = dependencyEdgesForCards(cards);
+  const blockedEdges = edges.filter((edge) => edge.dependency.status === "blocked");
+  const conflictEdges = edges.filter((edge) => edge.issues.some((issue) => issue.type === "date_conflict"));
+  const chainCards = cards.filter((card) => card.dependency_ids?.length || dependencyDependentsFor(card.id, cards).length);
+
+  if (!project) {
+    return <EmptyProjectView label="Create or select a project to see its dependency graph." />;
+  }
+
+  return (
+    <section className="overview-workspace">
+      <div className="overview-summary-grid graph-summary-grid">
+        <MetricTile label="Dependency Edges" value={edges.length} />
+        <MetricTile label="Cards In Graph" value={chainCards.length} />
+        <MetricTile label="Blocked Chains" tone={blockedEdges.length ? "danger" : ""} value={blockedEdges.length} />
+        <MetricTile label="Date Conflicts" tone={conflictEdges.length ? "danger" : ""} value={conflictEdges.length} />
+      </div>
+
+      <section className="overview-panel dependency-graph-panel">
+        <header>
+          <h2>{project.name} Dependency Graph</h2>
+          <span>Blocked-by relationships</span>
+        </header>
+        {edges.length ? (
+          <div className="dependency-edge-list">
+            {edges.map(({ dependency, dependent, issues }) => (
+              <article
+                className={issues.length || dependency.status === "blocked" ? "dependency-edge has-issue" : "dependency-edge"}
+                key={`${dependency.id}-${dependent.id}`}
+              >
+                <button type="button" onClick={() => onOpenCard(dependency)}>
+                  <span className={`card-type ${dependency.card_type}`}>{cardTypeLabels[dependency.card_type]}</span>
+                  <strong>{dependency.title}</strong>
+                  <em>{statusLabels[dependency.status]}</em>
+                </button>
+                <span className="dependency-arrow">blocks</span>
+                <button type="button" onClick={() => onOpenCard(dependent)}>
+                  <span className={`card-type ${dependent.card_type}`}>{cardTypeLabels[dependent.card_type]}</span>
+                  <strong>{dependent.title}</strong>
+                  <em>{statusLabels[dependent.status]}</em>
+                </button>
+                <div>
+                  {dependency.status === "blocked" ? <span className="issue-badge compact">blocked chain</span> : null}
+                  {issues.map((issue) => (
+                    <span className="issue-badge compact" key={`${issue.type}-${issue.dependency.id}`}>{issue.type === "date_conflict" ? "date conflict" : "issue"}</span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            actionLabel="Add Card"
+            label="No dependency links yet. Add dependencies from a card to populate the graph."
+            onAction={() => onStartNewCard("epic", "backlog")}
+          />
+        )}
+      </section>
     </section>
   );
 }

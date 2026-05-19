@@ -41,14 +41,14 @@
    - Track date changes
    - Track parent changes
    - Track comment changes
-6. Add bulk edit actions
+6. [x] Add bulk edit actions
    - Bulk status change
    - Bulk date change
    - Bulk card type change where hierarchy rules allow it
 7. Create an Artifact Repository / wiki
    - Attach reference notes to projects or cards
    - Link artifacts from card comments
-8. Add dependency graph view
+8. [x] Add dependency graph view
    - Visualize blocked-by relationships separately from hierarchy
    - Highlight blocked chains and date conflicts
    - Open cards directly from graph nodes

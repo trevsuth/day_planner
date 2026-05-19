@@ -832,6 +832,106 @@ textarea {
   white-space: nowrap;
 }
 
+.bulk-edit-shell {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 12px;
+  border: 1px solid rgba(91, 210, 234, 0.24);
+  background: rgba(5, 16, 21, 0.62);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.bulk-edit-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.bulk-edit-toggle span,
+.bulk-edit-toggle strong {
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bulk-edit-toggle strong {
+  justify-self: end;
+  color: var(--muted);
+}
+
+.bulk-edit-toggle span:last-child {
+  color: var(--line-strong);
+}
+
+.bulk-edit-panel {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+}
+
+.bulk-edit-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bulk-edit-panel > header > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bulk-edit-panel span,
+.bulk-edit-panel p,
+.bulk-edit-controls label span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bulk-edit-panel strong {
+  color: var(--text);
+  font-size: 0.84rem;
+  text-transform: uppercase;
+}
+
+.bulk-edit-panel p {
+  margin: 0;
+  color: var(--amber);
+}
+
+.bulk-edit-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr)) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.bulk-edit-controls label {
+  display: grid;
+  gap: 6px;
+}
+
+.bulk-edit-controls input,
+.bulk-edit-controls select {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(91, 210, 234, 0.25);
+  background: rgba(3, 10, 14, 0.72);
+  color: var(--text);
+  outline: none;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+
 .project-form,
 .project-list {
   display: grid;
@@ -934,6 +1034,10 @@ textarea {
   display: grid;
   grid-template-columns: repeat(6, minmax(110px, 1fr));
   gap: 10px;
+}
+
+.graph-summary-grid {
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
 }
 
 .metric-tile,
@@ -1149,6 +1253,70 @@ textarea {
 .issue-actions .secondary-button {
   min-height: 32px;
   padding: 0 10px;
+}
+
+.dependency-graph-panel {
+  min-height: 360px;
+}
+
+.dependency-edge-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dependency-edge {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(91, 210, 234, 0.24);
+  background: rgba(5, 16, 21, 0.72);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.dependency-edge.has-issue {
+  border-color: rgba(255, 105, 97, 0.5);
+  background:
+    linear-gradient(135deg, rgba(255, 105, 97, 0.08), transparent 36%),
+    rgba(5, 16, 21, 0.78);
+}
+
+.dependency-edge > button {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.dependency-edge strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dependency-edge em,
+.dependency-arrow {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.dependency-arrow {
+  color: var(--line-strong);
+}
+
+.dependency-edge > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .empty-overview {
@@ -1599,6 +1767,16 @@ textarea {
   padding: 12px;
   color: var(--text);
   cursor: grab;
+}
+
+.bulk-select-control {
+  justify-self: end;
+}
+
+.bulk-select-control input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--green);
 }
 
 .project-card:active {
@@ -2327,6 +2505,16 @@ textarea {
     justify-self: start;
   }
 
+  .bulk-edit-toggle {
+    grid-template-columns: 1fr auto;
+  }
+
+  .bulk-edit-toggle strong {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
   .filter-summary {
     align-items: start;
     justify-items: start;
@@ -2342,8 +2530,23 @@ textarea {
   }
 
   .overview-summary-grid,
+  .graph-summary-grid,
   .portfolio-grid {
     grid-template-columns: 1fr;
+  }
+
+  .bulk-edit-panel > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bulk-edit-controls,
+  .dependency-edge {
+    grid-template-columns: 1fr;
+  }
+
+  .dependency-edge > div {
+    justify-content: flex-start;
   }
 
   .roadmap-card,
