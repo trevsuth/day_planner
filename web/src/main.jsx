@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Clock,
   Download,
+  FileText,
   GitBranch,
   FolderKanban,
   ListChecks,
@@ -19,6 +20,7 @@ import {
   Save,
   Star,
   Trash2,
+  Upload,
 } from "lucide-react";
 import "./styles.css";
 
@@ -72,7 +74,35 @@ const statusOrder = {
   done: 3,
 };
 
+const cardTypeOrder = {
+  epic: 0,
+  feature: 1,
+  story: 2,
+  subtask: 3,
+};
+
 const PROJECT_VIEWS = ["portfolio", "issues", "roadmap", "timeline", "gantt", "calendar", "board"];
+
+const projectCardCsvHeaders = [
+  "Project Name",
+  "Hierarchy Level",
+  "Card ID",
+  "Type",
+  "Title",
+  "Status",
+  "Parent ID",
+  "Parent Type",
+  "Parent Title",
+  "Dependency IDs",
+  "Dependency Titles",
+  "Start Date",
+  "Due Date",
+  "Deliverables",
+  "Description",
+  "Comments",
+  "Created At",
+  "Updated At",
+];
 
 const defaultProjectFilters = {
   query: "",
@@ -157,6 +187,81 @@ function plannerPriorityText(card, project) {
 function csvEscape(value) {
   const text = String(value ?? "");
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function downloadCsv(filename, rows) {
+  const csv = `${rows.map((row) => row.map(csvEscape).join(",")).join("\n")}\n`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const nextChar = text[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && nextChar === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  return rows;
+}
+
+function csvHeaderMap(headers) {
+  return Object.fromEntries(headers.map((header, index) => [header.trim().toLowerCase(), index]));
+}
+
+function csvValue(row, headers, name) {
+  const index = headers[name.toLowerCase()];
+  return index === undefined ? "" : (row[index] || "").trim();
+}
+
+function splitCsvList(value) {
+  return value
+    .split(";")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeCardType(value) {
+  const normalized = value.trim().toLowerCase();
+  return CARD_TYPES.find((type) => type === normalized || cardTypeLabels[type].toLowerCase() === normalized) || "";
+}
+
+function normalizeCardStatus(value) {
+  const normalized = value.trim().toLowerCase();
+  return STATUSES.find((status) => status === normalized || statusLabels[status].toLowerCase() === normalized) || "backlog";
 }
 
 function safeFilePart(value) {
@@ -754,15 +859,23 @@ function ProjectsApp() {
   const [draftProject, setDraftProject] = useState({ name: "", description: "" });
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
+  const [previewCard, setPreviewCard] = useState(null);
+  const [isProjectSwitcherOpen, setIsProjectSwitcherOpen] = useState(Boolean(storedProjectState.isProjectSwitcherOpen));
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(Boolean(storedProjectState.isFilterPanelOpen));
+  const [isCsvMenuOpen, setIsCsvMenuOpen] = useState(false);
   const [status, setStatus] = useState("Loading");
   const [error, setError] = useState("");
   const projectNameInputRef = useRef(null);
   const searchInputRef = useRef(null);
+  const csvUploadInputRef = useRef(null);
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const selectedCardId = selectedCard?.id || "";
   const selectedCardActivity = selectedCardId ? cardActivityById[selectedCardId] || [] : [];
+  const previewCardId = previewCard?.id || "";
   const filteredCards = cards.filter((card) => cardMatchesFilters(card, projectFilters));
+  const activeProjectSummary = summarizeCards(cards);
+  const activeProjectIssueCount = projectIssuesForCards(cards).length;
   const filteredProjectCardsById = Object.fromEntries(
     Object.entries(projectCardsById).map(([projectId, projectCards]) => [
       projectId,
@@ -801,9 +914,17 @@ function ProjectsApp() {
         activeProjectId,
         projectView,
         projectFilters,
+        isProjectSwitcherOpen,
+        isFilterPanelOpen,
       }),
     );
-  }, [activeProjectId, projectFilters, projectView]);
+  }, [activeProjectId, isFilterPanelOpen, isProjectSwitcherOpen, projectFilters, projectView]);
+
+  useEffect(() => {
+    if (!previewCardId) return;
+    const updatedCard = cards.find((card) => card.id === previewCardId);
+    setPreviewCard(updatedCard || null);
+  }, [cards, previewCardId]);
 
   useEffect(() => {
     if (!filteredCards.length) {
@@ -850,7 +971,8 @@ function ProjectsApp() {
 
       if (!isTyping && !event.altKey && key === "/") {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        setIsFilterPanelOpen(true);
+        window.requestAnimationFrame(() => searchInputRef.current?.focus());
         return;
       }
 
@@ -876,6 +998,7 @@ function ProjectsApp() {
 
       if (key === "n") {
         event.preventDefault();
+        setIsProjectSwitcherOpen(true);
         projectNameInputRef.current?.focus();
       } else if (key === "c") {
         event.preventDefault();
@@ -910,6 +1033,12 @@ function ProjectsApp() {
     selectedCard,
     selectedProject,
   ]);
+
+  useEffect(() => {
+    if (isProjectSwitcherOpen) {
+      projectNameInputRef.current?.focus();
+    }
+  }, [isProjectSwitcherOpen]);
 
   async function request(path, options = {}) {
     const response = await fetch(path, {
@@ -1034,6 +1163,7 @@ function ProjectsApp() {
           setActiveProjectId(remaining[0]?.id || "");
           setSelectedCard(null);
           setSelectedProject(null);
+          setPreviewCard(null);
         }
         return remaining;
       });
@@ -1090,7 +1220,7 @@ function ProjectsApp() {
 
   function openKeyboardCard() {
     const card = filteredCards.find((candidate) => candidate.id === keyboardCardId) || filteredCards[0];
-    if (card) setSelectedCard(card);
+        if (card) setPreviewCard(card);
   }
 
   async function saveCard(event) {
@@ -1181,6 +1311,7 @@ function ProjectsApp() {
       });
       setKeyboardCardId(saved.id);
       setSelectedCard(null);
+      setPreviewCard(saved);
       setError("");
     } catch (err) {
       setError(err.message);
@@ -1211,6 +1342,7 @@ function ProjectsApp() {
         [selectedCard.project_id]: (current[selectedCard.project_id] || []).filter((card) => card.id !== selectedCard.id),
       }));
       setSelectedCard(null);
+      setPreviewCard((current) => (current?.id === selectedCard.id ? null : current));
       setError("");
     } catch (err) {
       setError(err.message);
@@ -1287,31 +1419,12 @@ function ProjectsApp() {
 
   function exportActiveProjectCards() {
     if (!activeProject) return;
+    setIsCsvMenuOpen(false);
 
     const expandableIds = new Set(cards.filter((card) => cards.some((candidate) => candidate.parent_id === card.id)).map((card) => card.id));
     const rows = getHierarchyRows(cards, expandableIds);
-    const headers = [
-      "Project Name",
-      "Hierarchy Level",
-      "Card ID",
-      "Type",
-      "Title",
-      "Status",
-      "Parent ID",
-      "Parent Type",
-      "Parent Title",
-      "Dependency IDs",
-      "Dependency Titles",
-      "Start Date",
-      "Due Date",
-      "Deliverables",
-      "Description",
-      "Comments",
-      "Created At",
-      "Updated At",
-    ];
     const csvRows = [
-      headers,
+      projectCardCsvHeaders,
       ...rows.map(({ card, level }) => {
         const parent = cards.find((candidate) => candidate.id === card.parent_id);
         const dependencies = dependencyCardsFor(card, cards);
@@ -1337,17 +1450,134 @@ function ProjectsApp() {
         ];
       }),
     ];
-    const csv = `${csvRows.map((row) => row.map(csvEscape).join(",")).join("\n")}\n`;
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${safeFilePart(activeProject.name)}-cards-${formatDateInput(new Date())}.csv`;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    downloadCsv(`${safeFilePart(activeProject.name)}-cards-${formatDateInput(new Date())}.csv`, csvRows);
     setStatus(`Exported ${rows.length} cards`);
+  }
+
+  function downloadProjectCardTemplate() {
+    setIsCsvMenuOpen(false);
+    const templateRows = [projectCardCsvHeaders];
+    downloadCsv(`project-card-template-${formatDateInput(new Date())}.csv`, templateRows);
+    setStatus("Downloaded CSV template");
+  }
+
+  async function uploadProjectCardsCsv(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setIsCsvMenuOpen(false);
+    if (!file || !activeProjectId) return;
+
+    try {
+      const text = await file.text();
+      const parsedRows = parseCsv(text);
+      if (parsedRows.length < 2) throw new Error("CSV must include a header row and at least one card row.");
+
+      const headers = csvHeaderMap(parsedRows[0]);
+      for (const requiredHeader of ["Type", "Title"]) {
+        if (headers[requiredHeader.toLowerCase()] === undefined) {
+          throw new Error(`CSV is missing the "${requiredHeader}" column.`);
+        }
+      }
+
+      const importRows = parsedRows
+        .slice(1)
+        .map((row, index) => {
+          const cardType = normalizeCardType(csvValue(row, headers, "Type"));
+          return {
+            row,
+            index,
+            cardType,
+            title: csvValue(row, headers, "Title"),
+            sourceId: csvValue(row, headers, "Card ID"),
+            parentId: csvValue(row, headers, "Parent ID"),
+            dependencyIds: splitCsvList(csvValue(row, headers, "Dependency IDs")),
+            dependencyTitles: splitCsvList(csvValue(row, headers, "Dependency Titles")),
+            hierarchyLevel: Number(csvValue(row, headers, "Hierarchy Level")),
+          };
+        })
+        .filter((row) => row.title);
+
+      if (!importRows.length) throw new Error("CSV did not contain any cards with titles.");
+
+      const existingById = new Map(cards.map((card) => [card.id, card]));
+      const existingByTitle = new Map(cards.map((card) => [card.title.trim().toLowerCase(), card]));
+      const createdBySourceId = new Map();
+      const createdRecords = [];
+      const sortedRows = [...importRows].sort((first, second) => {
+        const firstLevel = Number.isFinite(first.hierarchyLevel) ? first.hierarchyLevel : cardTypeOrder[first.cardType] || 0;
+        const secondLevel = Number.isFinite(second.hierarchyLevel) ? second.hierarchyLevel : cardTypeOrder[second.cardType] || 0;
+        return firstLevel - secondLevel || first.index - second.index;
+      });
+
+      for (const importRow of sortedRows) {
+        if (!importRow.cardType) throw new Error(`Unsupported card type for "${importRow.title}".`);
+        const expectedParentType = parentTypeByCardType[importRow.cardType];
+        const parent =
+          createdBySourceId.get(importRow.parentId) ||
+          existingById.get(importRow.parentId) ||
+          existingByTitle.get(csvValue(importRow.row, headers, "Parent Title").toLowerCase());
+
+        if (expectedParentType && !parent) {
+          throw new Error(`${cardTypeLabels[importRow.cardType]} "${importRow.title}" needs a parent ${cardTypeLabels[expectedParentType]}.`);
+        }
+
+        const saved = await request("/api/projmgmt/cards", {
+          method: "POST",
+          body: JSON.stringify({
+            project_id: activeProjectId,
+            card_type: importRow.cardType,
+            title: importRow.title,
+            description: csvValue(importRow.row, headers, "Description") || null,
+            comments: csvValue(importRow.row, headers, "Comments") || null,
+            status: normalizeCardStatus(csvValue(importRow.row, headers, "Status")),
+            start_date: csvValue(importRow.row, headers, "Start Date") || null,
+            due_date: csvValue(importRow.row, headers, "Due Date") || null,
+            parent_id: parent?.id || null,
+            dependency_ids: [],
+            deliverables: splitCsvList(csvValue(importRow.row, headers, "Deliverables")),
+          }),
+        });
+
+        if (importRow.sourceId) createdBySourceId.set(importRow.sourceId, saved);
+        createdRecords.push({ importRow, saved });
+      }
+
+      const allCardsById = new Map([...cards, ...createdRecords.map((record) => record.saved)].map((card) => [card.id, card]));
+      const allCardsByTitle = new Map(
+        [...cards, ...createdRecords.map((record) => record.saved)].map((card) => [card.title.trim().toLowerCase(), card]),
+      );
+
+      for (const { importRow, saved } of createdRecords) {
+        const dependencyIds = [
+          ...importRow.dependencyIds.map((dependencyId) => createdBySourceId.get(dependencyId)?.id || allCardsById.get(dependencyId)?.id),
+          ...importRow.dependencyTitles.map((title) => allCardsByTitle.get(title.toLowerCase())?.id),
+        ].filter(Boolean);
+        const uniqueDependencyIds = [...new Set(dependencyIds)];
+        if (!uniqueDependencyIds.length) continue;
+
+        await request(`/api/projmgmt/cards/${saved.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            card_type: saved.card_type,
+            title: saved.title,
+            description: saved.description || null,
+            comments: saved.comments || null,
+            status: saved.status,
+            start_date: saved.start_date || null,
+            due_date: saved.due_date || null,
+            parent_id: saved.parent_id || null,
+            dependency_ids: uniqueDependencyIds,
+            deliverables: saved.deliverables || [],
+          }),
+        });
+      }
+
+      await loadCards(activeProjectId);
+      setError("");
+      setStatus(`Imported ${createdRecords.length} cards`);
+    } catch (err) {
+      setError(err.message || "Could not import CSV.");
+    }
   }
 
   return (
@@ -1360,21 +1590,99 @@ function ProjectsApp() {
           </div>
           <h1>{activeProject?.name || "Projects"}</h1>
         </div>
-        <button className="save-button" type="button" onClick={() => startNewCard()} disabled={!activeProjectId}>
-          <Plus size={18} />
-          <span>Card</span>
-        </button>
-        <button className="secondary-button" type="button" onClick={() => openProjectCard(activeProject)} disabled={!activeProject}>
-          <FolderKanban size={18} />
-          <span>Project Card</span>
-        </button>
-        <button className="secondary-button" type="button" onClick={exportActiveProjectCards} disabled={!activeProject}>
-          <Download size={18} />
-          <span>CSV</span>
-        </button>
+        <div className="project-toolbar">
+          <div className="toolbar-group primary-actions" aria-label="Primary project actions">
+            <span>Primary</span>
+            <button className="save-button" type="button" onClick={() => startNewCard()} disabled={!activeProjectId}>
+              <Plus size={18} />
+              <span>Card</span>
+            </button>
+          </div>
+          <div className="toolbar-group" aria-label="Project actions">
+            <span>Project</span>
+            <button className="secondary-button" type="button" onClick={() => setIsProjectSwitcherOpen((current) => !current)}>
+              <FolderKanban size={18} />
+              <span>Projects</span>
+            </button>
+            <button className="secondary-button" type="button" onClick={() => openProjectCard(activeProject)} disabled={!activeProject}>
+              <FolderKanban size={18} />
+              <span>Card</span>
+            </button>
+          </div>
+          <div className="toolbar-group" aria-label="Project card CSV actions">
+            <span>Cards CSV</span>
+            <div className="csv-menu">
+              <button className="secondary-button" type="button" onClick={() => setIsCsvMenuOpen((current) => !current)}>
+                <FileText size={18} />
+                <span>Data</span>
+              </button>
+            </div>
+            <input
+              ref={csvUploadInputRef}
+              aria-label="Upload project cards CSV"
+              className="csv-upload-input"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={uploadProjectCardsCsv}
+            />
+          </div>
+        </div>
       </header>
 
       <StatusLine error={error} label={error || status} />
+
+      <ProjectSummaryBar
+        issueCount={activeProjectIssueCount}
+        project={activeProject}
+        summary={activeProjectSummary}
+      />
+
+      {isProjectSwitcherOpen ? (
+        <section className="project-drawer" aria-label="Project selection and creation">
+          <form className="project-form" onSubmit={createProject}>
+            <input
+              ref={projectNameInputRef}
+              value={draftProject.name}
+              onChange={(event) => setDraftProject((current) => ({ ...current, name: event.target.value }))}
+              placeholder="New project"
+            />
+            <textarea
+              value={draftProject.description}
+              onChange={(event) =>
+                setDraftProject((current) => ({ ...current, description: event.target.value }))
+              }
+              placeholder="Description"
+            />
+            <button className="save-button" type="submit">
+              <Plus size={18} />
+              <span>Project</span>
+            </button>
+          </form>
+
+          <div className="project-list">
+            {projects.map((project) => (
+              <div className={project.id === activeProjectId ? "active" : ""} key={project.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveProjectId(project.id);
+                    setIsProjectSwitcherOpen(false);
+                  }}
+                >
+                  <strong>{project.name}</strong>
+                  {project.description ? <span>{project.description}</span> : null}
+                </button>
+                <IconButton label={`Open ${project.name} project card`} onClick={() => openProjectCard(project)}>
+                  <FolderKanban size={17} />
+                </IconButton>
+                <IconButton label={`Delete ${project.name}`} onClick={() => deleteProject(project)}>
+                  <Trash2 size={17} />
+                </IconButton>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <nav className="project-view-tabs" aria-label="Project management views">
         <button className={projectView === "portfolio" ? "active" : ""} type="button" onClick={() => setProjectView("portfolio")}>
@@ -1410,9 +1718,11 @@ function ProjectsApp() {
       <ProjectFilters
         filters={projectFilters}
         hasActiveFilters={hasActiveFilters}
+        isOpen={isFilterPanelOpen}
         onClear={clearProjectFilters}
         onQueryChange={(value) => updateProjectFilter("query", value)}
         onScheduleChange={(value) => updateProjectFilter("schedule", value)}
+        onToggleOpen={() => setIsFilterPanelOpen((current) => !current)}
         onToggleCardType={(value) => toggleProjectFilter("cardTypes", value)}
         onToggleStatus={(value) => toggleProjectFilter("statuses", value)}
         resultCount={filteredCards.length}
@@ -1421,49 +1731,11 @@ function ProjectsApp() {
       />
 
       <div className="projects-layout">
-        <aside className="project-sidebar">
-          <form className="project-form" onSubmit={createProject}>
-            <input
-              ref={projectNameInputRef}
-              value={draftProject.name}
-              onChange={(event) => setDraftProject((current) => ({ ...current, name: event.target.value }))}
-              placeholder="New project"
-            />
-            <textarea
-              value={draftProject.description}
-              onChange={(event) =>
-                setDraftProject((current) => ({ ...current, description: event.target.value }))
-              }
-              placeholder="Description"
-            />
-            <button className="save-button" type="submit">
-              <Plus size={18} />
-              <span>Project</span>
-            </button>
-          </form>
-
-          <div className="project-list">
-            {projects.map((project) => (
-              <div className={project.id === activeProjectId ? "active" : ""} key={project.id}>
-                <button type="button" onClick={() => setActiveProjectId(project.id)}>
-                  <strong>{project.name}</strong>
-                  {project.description ? <span>{project.description}</span> : null}
-                </button>
-                <IconButton label={`Open ${project.name} project card`} onClick={() => openProjectCard(project)}>
-                  <FolderKanban size={17} />
-                </IconButton>
-                <IconButton label={`Delete ${project.name}`} onClick={() => deleteProject(project)}>
-                  <Trash2 size={17} />
-                </IconButton>
-              </div>
-            ))}
-          </div>
-        </aside>
-
         {projectView === "portfolio" ? (
           <PortfolioOverview
             cardsByProjectId={hasActiveFilters ? filteredProjectCardsById : projectCardsById}
             onOpenProject={openProjectCard}
+            onStartProject={() => setIsProjectSwitcherOpen(true)}
             projects={projects}
             selectedProjectId={activeProjectId}
             setActiveProjectId={setActiveProjectId}
@@ -1474,37 +1746,63 @@ function ProjectsApp() {
           <ProjectRoadmap
             cards={filteredCards}
             onCreateEpic={() => startNewCard("epic", "backlog")}
-            onOpenCard={setSelectedCard}
+            onOpenCard={setPreviewCard}
             project={activeProject}
           />
         ) : null}
 
         {projectView === "issues" ? (
-          <ProjectIssues cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
+          <ProjectIssues
+            cards={filteredCards}
+            onMoveCard={moveCardToStatus}
+            onOpenCard={setPreviewCard}
+            onStartNewCard={startNewCard}
+            project={activeProject}
+          />
         ) : null}
 
         {projectView === "board" ? (
           <ProjectBoard
             cards={filteredCards}
             onMoveCard={moveCardToStatus}
-            onOpenCard={setSelectedCard}
+            onOpenCard={setPreviewCard}
             onStartNewCard={startNewCard}
-            selectedCardId={keyboardCardId}
+            selectedCardId={previewCard?.id || keyboardCardId}
           />
         ) : null}
 
         {projectView === "timeline" ? (
-          <ProjectTimeline cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
+          <ProjectTimeline cards={filteredCards} onOpenCard={setPreviewCard} onStartNewCard={startNewCard} project={activeProject} />
         ) : null}
 
         {projectView === "gantt" ? (
-          <ProjectGantt cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
+          <ProjectGantt cards={filteredCards} onOpenCard={setPreviewCard} onStartNewCard={startNewCard} project={activeProject} />
         ) : null}
 
         {projectView === "calendar" ? (
-          <ProjectCalendar cards={filteredCards} onOpenCard={setSelectedCard} project={activeProject} />
+          <ProjectCalendar cards={filteredCards} onOpenCard={setPreviewCard} onStartNewCard={startNewCard} project={activeProject} />
         ) : null}
       </div>
+
+      {previewCard ? (
+        <CardPreviewPanel
+          card={previewCard}
+          cards={cards}
+          onClose={() => setPreviewCard(null)}
+          onEdit={(card) => setSelectedCard(card)}
+          onMoveCard={moveCardToStatus}
+        />
+      ) : null}
+
+      {isCsvMenuOpen ? (
+        <CsvActionsPanel
+          activeProject={activeProject}
+          onClose={() => setIsCsvMenuOpen(false)}
+          onDownloadTemplate={downloadProjectCardTemplate}
+          onExport={exportActiveProjectCards}
+          onImport={() => csvUploadInputRef.current?.click()}
+        />
+      ) : null}
 
       {selectedCard ? (
         <CardEditor
@@ -1747,12 +2045,52 @@ function CodeBlock({ value }) {
   return <pre className="api-code"><code>{value}</code></pre>;
 }
 
+function ProjectSummaryBar({ issueCount, project, summary }) {
+  if (!project) {
+    return (
+      <section className="project-summary-bar">
+        <div>
+          <span>Active Project</span>
+          <strong>No project selected</strong>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="project-summary-bar">
+      <div className="project-summary-description">
+        <span>Active Project</span>
+        <strong>{project.description || "No description"}</strong>
+      </div>
+      <div>
+        <span>Total Cards</span>
+        <strong>{summary.total}</strong>
+      </div>
+      <div className={issueCount ? "attention" : ""}>
+        <span>Open Issues</span>
+        <strong>{issueCount}</strong>
+      </div>
+      <div>
+        <span>Next Due</span>
+        <strong>{summary.nextDueDate || "None"}</strong>
+      </div>
+      <div>
+        <span>Complete</span>
+        <strong>{summary.completion}%</strong>
+      </div>
+    </section>
+  );
+}
+
 function ProjectFilters({
   filters,
   hasActiveFilters,
+  isOpen,
   onClear,
   onQueryChange,
   onScheduleChange,
+  onToggleOpen,
   onToggleCardType,
   onToggleStatus,
   resultCount,
@@ -1760,74 +2098,91 @@ function ProjectFilters({
   totalCount,
 }) {
   return (
-    <section className="project-filter-panel" aria-label="Project filters">
-      <label className="filter-search">
-        <span>Search</span>
-        <input
-          ref={searchInputRef}
-          value={filters.query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Title, description, comments, deliverables"
-        />
-      </label>
+    <section className="project-filter-shell" aria-label="Project filters">
+      <button
+        className="project-filter-toggle"
+        type="button"
+        onClick={onToggleOpen}
+        aria-expanded={isOpen}
+      >
+        <span>Filters</span>
+        <strong>{resultCount} of {totalCount} cards</strong>
+        <span>{isOpen ? "Hide" : "Show"}</span>
+      </button>
 
-      <div className="filter-group" aria-label="Card type filters">
-        <span>Type</span>
-        <div className="filter-buttons">
-          {CARD_TYPES.map((type) => (
-            <button
-              className={filters.cardTypes.includes(type) ? "filter-chip active" : "filter-chip"}
-              key={type}
-              type="button"
-              onClick={() => onToggleCardType(type)}
-            >
-              {cardTypeLabels[type]}
-            </button>
-          ))}
+      {isOpen ? (
+        <div className="project-filter-panel">
+          <label className="filter-search">
+            <span>Search</span>
+            <input
+              ref={searchInputRef}
+              value={filters.query}
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="Title, description, comments, deliverables"
+            />
+          </label>
+
+          <div className="filter-group" aria-label="Card type filters">
+            <span>Type</span>
+            <div className="filter-buttons">
+              {CARD_TYPES.map((type) => (
+                <button
+                  className={filters.cardTypes.includes(type) ? "filter-chip active" : "filter-chip"}
+                  key={type}
+                  type="button"
+                  onClick={() => onToggleCardType(type)}
+                >
+                  {cardTypeLabels[type]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="filter-group" aria-label="Status filters">
+            <span>Status</span>
+            <div className="filter-buttons">
+              {STATUSES.map((statusValue) => (
+                <button
+                  className={filters.statuses.includes(statusValue) ? "filter-chip active" : "filter-chip"}
+                  key={statusValue}
+                  type="button"
+                  onClick={() => onToggleStatus(statusValue)}
+                >
+                  {statusLabels[statusValue]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <label className="filter-schedule">
+            <span>Schedule</span>
+            <select value={filters.schedule} onChange={(event) => onScheduleChange(event.target.value)}>
+              <option value="all">All cards</option>
+              <option value="blocked">Blocked</option>
+              <option value="overdue">Overdue</option>
+              <option value="due_soon">Due soon</option>
+              <option value="undated">Unassigned dates</option>
+            </select>
+          </label>
+
+          <div className="filter-summary">
+            {hasActiveFilters ? (
+              <button className="secondary-button" type="button" onClick={onClear}>
+                Clear
+              </button>
+            ) : null}
+          </div>
+
+          <div className="project-filter-footer">
+            <p className="project-shortcuts">
+              / search | J/K select | Enter open | Alt+1-7 views | Alt+0 clear
+            </p>
+            <span>
+              {resultCount} of {totalCount} cards
+            </span>
+          </div>
         </div>
-      </div>
-
-      <div className="filter-group" aria-label="Status filters">
-        <span>Status</span>
-        <div className="filter-buttons">
-          {STATUSES.map((statusValue) => (
-            <button
-              className={filters.statuses.includes(statusValue) ? "filter-chip active" : "filter-chip"}
-              key={statusValue}
-              type="button"
-              onClick={() => onToggleStatus(statusValue)}
-            >
-              {statusLabels[statusValue]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <label className="filter-schedule">
-        <span>Schedule</span>
-        <select value={filters.schedule} onChange={(event) => onScheduleChange(event.target.value)}>
-          <option value="all">All cards</option>
-          <option value="blocked">Blocked</option>
-          <option value="overdue">Overdue</option>
-          <option value="due_soon">Due soon</option>
-          <option value="undated">Unassigned dates</option>
-        </select>
-      </label>
-
-      <div className="filter-summary">
-        <span>
-          {resultCount} of {totalCount} cards
-        </span>
-        {hasActiveFilters ? (
-          <button className="secondary-button" type="button" onClick={onClear}>
-            Clear
-          </button>
-        ) : null}
-      </div>
-
-      <p className="project-shortcuts">
-        / search | J/K select | Enter open | Alt+1-7 views | Alt+0 clear
-      </p>
+      ) : null}
     </section>
   );
 }
@@ -1920,8 +2275,19 @@ function IssueMarker({ card, cards, compact = false }) {
   );
 }
 
-function ProjectIssues({ cards, onOpenCard, project }) {
+function groupIssuesByType(issueGroups, issueType) {
+  return issueGroups
+    .map(({ card, issues }) => ({
+      card,
+      issues: issues.filter((issue) => issue.type === issueType),
+    }))
+    .filter((group) => group.issues.length);
+}
+
+function ProjectIssues({ cards, onMoveCard, onOpenCard, onStartNewCard, project }) {
   const issueGroups = projectIssuesForCards(cards);
+  const blockedGroups = groupIssuesByType(issueGroups, "blocked_dependency");
+  const dateConflictGroups = groupIssuesByType(issueGroups, "date_conflict");
   const blockedCount = issueGroups.reduce(
     (total, group) => total + group.issues.filter((issue) => issue.type === "blocked_dependency").length,
     0,
@@ -1932,7 +2298,7 @@ function ProjectIssues({ cards, onOpenCard, project }) {
   );
 
   if (!project) {
-    return <div className="overview-panel empty-overview">Create or select a project to see dependency issues.</div>;
+    return <EmptyProjectView label="Create or select a project to see dependency issues." />;
   }
 
   return (
@@ -1950,29 +2316,64 @@ function ProjectIssues({ cards, onOpenCard, project }) {
         </header>
         {issueGroups.length ? (
           <div className="issues-list">
-            {issueGroups.map(({ card, issues }) => (
-              <button className="issue-row" key={card.id} type="button" onClick={() => onOpenCard(card)}>
-                <div>
-                  <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
-                  <strong>{card.title}</strong>
-                </div>
-                <ul>
-                  {issues.map((issue) => (
-                    <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
-                  ))}
-                </ul>
-              </button>
-            ))}
+            <IssueGroup
+              actionLabel="Mark blocked"
+              groups={blockedGroups}
+              onAction={(card) => onMoveCard(card, "blocked")}
+              onOpenCard={onOpenCard}
+              title="Blocked Dependencies"
+            />
+            <IssueGroup
+              actionLabel="Open card"
+              groups={dateConflictGroups}
+              onAction={onOpenCard}
+              onOpenCard={onOpenCard}
+              title="Date Conflicts"
+            />
           </div>
         ) : (
-          <p className="empty-overview">No blocked dependencies or date conflicts.</p>
+          <EmptyState
+            actionLabel="Add Card"
+            label="No blocked dependencies or date conflicts."
+            onAction={() => onStartNewCard("epic", "backlog")}
+          />
         )}
       </section>
     </section>
   );
 }
 
-function PortfolioOverview({ cardsByProjectId, onOpenProject, projects, selectedProjectId, setActiveProjectId }) {
+function IssueGroup({ actionLabel, groups, onAction, onOpenCard, title }) {
+  if (!groups.length) return null;
+  return (
+    <section className="issue-group">
+      <h3>{title}</h3>
+      {groups.map(({ card, issues }) => (
+        <article className="issue-row" key={`${title}-${card.id}`}>
+          <button type="button" onClick={() => onOpenCard(card)}>
+            <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
+            <strong>{card.title}</strong>
+          </button>
+          <ul>
+            {issues.map((issue) => (
+              <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
+            ))}
+          </ul>
+          <div className="issue-actions">
+            <button className="secondary-button" type="button" onClick={() => onOpenCard(card)}>
+              Open
+            </button>
+            <button className="secondary-button" type="button" onClick={() => onAction(card)}>
+              {actionLabel}
+            </button>
+          </div>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+function PortfolioOverview({ cardsByProjectId, onOpenProject, onStartProject, projects, selectedProjectId, setActiveProjectId }) {
   const allCards = projects.flatMap((project) => cardsByProjectId[project.id] || []);
   const portfolioSummary = summarizeCards(allCards);
   const atRiskCards = sortCardsForRoadmap(
@@ -1997,7 +2398,7 @@ function PortfolioOverview({ cardsByProjectId, onOpenProject, projects, selected
             <span>{allCards.length} total cards</span>
           </header>
           <div className="portfolio-project-list">
-            {projects.map((project) => {
+            {projects.length ? projects.map((project) => {
               const projectCards = cardsByProjectId[project.id] || [];
               const summary = summarizeCards(projectCards);
               return (
@@ -2016,7 +2417,9 @@ function PortfolioOverview({ cardsByProjectId, onOpenProject, projects, selected
                   <ProjectSummaryChips summary={summary} />
                 </button>
               );
-            })}
+            }) : (
+              <EmptyState actionLabel="Create Project" label="No projects yet." onAction={onStartProject} />
+            )}
           </div>
         </section>
 
@@ -2043,7 +2446,7 @@ function PortfolioOverview({ cardsByProjectId, onOpenProject, projects, selected
                 );
               })
             ) : (
-              <p className="empty-overview">No blocked or overdue work.</p>
+              <EmptyState label="No blocked or overdue work." />
             )}
           </div>
         </section>
@@ -2083,7 +2486,7 @@ function ProjectRoadmap({ cards, onCreateEpic, onOpenCard, project }) {
           ))}
         </div>
       ) : (
-        <div className="overview-panel empty-overview">No epics yet. Add an epic to start the roadmap.</div>
+        <EmptyState actionLabel="Add Epic" label="No epics yet. Add an epic to start the roadmap." onAction={onCreateEpic} />
       )}
     </section>
   );
@@ -2155,7 +2558,7 @@ function RoadmapFeature({ cards, feature, onOpenCard }) {
   );
 }
 
-function ProjectTimeline({ cards, onOpenCard, project }) {
+function ProjectTimeline({ cards, onOpenCard, onStartNewCard, project }) {
   const points = getTimelinePoints(cards);
 
   if (!project) {
@@ -2185,13 +2588,17 @@ function ProjectTimeline({ cards, onOpenCard, project }) {
           ))}
         </div>
       ) : (
-        <div className="overview-panel empty-overview">No scheduled cards. Add start dates or due dates to populate the timeline.</div>
+        <EmptyState
+          actionLabel="Add Card"
+          label="No scheduled cards. Add start dates or due dates to populate the timeline."
+          onAction={() => onStartNewCard("epic", "backlog")}
+        />
       )}
     </section>
   );
 }
 
-function ProjectGantt({ cards, onOpenCard, project }) {
+function ProjectGantt({ cards, onOpenCard, onStartNewCard, project }) {
   const [expandedCardIds, setExpandedCardIds] = useState(() => new Set());
   const [showUndatedCards, setShowUndatedCards] = useState(true);
   const rows = getHierarchyRows(cards, expandedCardIds);
@@ -2309,17 +2716,21 @@ function ProjectGantt({ cards, onOpenCard, project }) {
           </div>
         </div>
       ) : (
-        <div className="overview-panel empty-overview">
-          {showUndatedCards
-            ? "No cards yet. Add cards to populate the Gantt chart."
-            : "No scheduled cards. Add start dates or due dates, or turn on undated cards."}
-        </div>
+        <EmptyState
+          actionLabel={showUndatedCards ? "Add Card" : "Show Undated"}
+          label={
+            showUndatedCards
+              ? "No cards yet. Add cards to populate the Gantt chart."
+              : "No scheduled cards. Add start dates or due dates, or turn on undated cards."
+          }
+          onAction={showUndatedCards ? () => onStartNewCard("epic", "backlog") : () => setShowUndatedCards(true)}
+        />
       )}
     </section>
   );
 }
 
-function ProjectCalendar({ cards, onOpenCard, project }) {
+function ProjectCalendar({ cards, onOpenCard, onStartNewCard, project }) {
   const scheduled = getScheduledCards(cards);
   const bounds = getScheduleBounds(scheduled);
   const monthStart = parseLocalDate(bounds.start);
@@ -2371,17 +2782,34 @@ function ProjectCalendar({ cards, onOpenCard, project }) {
           })}
         </div>
       ) : (
-        <div className="overview-panel empty-overview">No scheduled cards. Add start dates or due dates to populate the calendar.</div>
+        <EmptyState
+          actionLabel="Add Card"
+          label="No scheduled cards. Add start dates or due dates to populate the calendar."
+          onAction={() => onStartNewCard("epic", "backlog")}
+        />
       )}
     </section>
   );
 }
 
-function EmptyProjectView({ label }) {
+function EmptyProjectView({ actionLabel, label, onAction }) {
   return (
     <section className="overview-workspace">
-      <div className="overview-panel empty-overview">{label}</div>
+      <EmptyState actionLabel={actionLabel} label={label} onAction={onAction} />
     </section>
+  );
+}
+
+function EmptyState({ actionLabel, label, onAction }) {
+  return (
+    <div className="overview-panel empty-overview empty-action-state">
+      <p>{label}</p>
+      {actionLabel && onAction ? (
+        <button className="secondary-button" type="button" onClick={onAction}>
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -2416,6 +2844,118 @@ function ProjectSummaryChips({ summary }) {
       {summary.blocked ? <span className="danger">{summary.blocked} blocked</span> : null}
       {summary.overdue ? <span className="danger">{summary.overdue} overdue</span> : null}
     </div>
+  );
+}
+
+function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard }) {
+  const parentCard = cards.find((candidate) => candidate.id === card.parent_id);
+  const childCount = cards.filter((candidate) => candidate.parent_id === card.id).length;
+  const issues = cardDependencyIssues(card, cards);
+
+  return (
+    <aside className="card-preview-panel" aria-label="Selected card preview">
+      <header>
+        <div>
+          <span className={`card-type ${card.card_type}`}>{cardTypeLabels[card.card_type]}</span>
+          <h2>{card.title}</h2>
+        </div>
+        <IconButton label="Close preview" onClick={onClose}>
+          <ChevronRight size={18} />
+        </IconButton>
+      </header>
+
+      <div className="preview-meta-grid">
+        <div>
+          <span>Status</span>
+          <strong>{statusLabels[card.status]}</strong>
+        </div>
+        <div>
+          <span>Parent</span>
+          <strong>{parentCard ? parentCard.title : "Project root"}</strong>
+        </div>
+        <div>
+          <span>Start</span>
+          <strong>{card.start_date || "None"}</strong>
+        </div>
+        <div>
+          <span>Due</span>
+          <strong>{card.due_date || "None"}</strong>
+        </div>
+        <div>
+          <span>Children</span>
+          <strong>{childCount}</strong>
+        </div>
+        <div>
+          <span>Deliverables</span>
+          <strong>{card.deliverables?.length || 0}</strong>
+        </div>
+      </div>
+
+      {card.description ? <p>{card.description}</p> : <p className="empty-overview">No description.</p>}
+
+      {issues.length ? (
+        <section className="preview-issues">
+          <h3>Issues</h3>
+          <ul>
+            {issues.map((issue) => (
+              <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <div className="preview-actions">
+        <button className="save-button" type="button" onClick={() => onEdit(card)}>
+          <Save size={18} />
+          <span>Edit</span>
+        </button>
+        {card.status !== "blocked" ? (
+          <button className="secondary-button" type="button" onClick={() => onMoveCard(card, "blocked")}>
+            Mark Blocked
+          </button>
+        ) : (
+          <button className="secondary-button" type="button" onClick={() => onMoveCard(card, "in_progress")}>
+            Resume
+          </button>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function CsvActionsPanel({ activeProject, onClose, onDownloadTemplate, onExport, onImport }) {
+  return (
+    <aside className="csv-actions-panel" aria-label="Project card CSV actions">
+      <header>
+        <div>
+          <span>Cards CSV</span>
+          <h2>Data Tools</h2>
+        </div>
+        <IconButton label="Close CSV actions" onClick={onClose}>
+          <ChevronRight size={18} />
+        </IconButton>
+      </header>
+
+      <p>
+        Export the active project, import cards from a CSV, or download a blank
+        template with the expected columns.
+      </p>
+
+      <div className="csv-panel-actions">
+        <button className="secondary-button" type="button" onClick={onExport} disabled={!activeProject}>
+          <Download size={18} />
+          <span>Export cards</span>
+        </button>
+        <button className="secondary-button" type="button" onClick={onImport} disabled={!activeProject}>
+          <Upload size={18} />
+          <span>Import cards</span>
+        </button>
+        <button className="secondary-button" type="button" onClick={onDownloadTemplate}>
+          <FileText size={18} />
+          <span>Download template</span>
+        </button>
+      </div>
+    </aside>
   );
 }
 
