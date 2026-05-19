@@ -4,7 +4,13 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app_projmgmt.models import Project, ProjectCard, ProjectCardCreate, ProjectCreate
+from app_projmgmt.models import (
+    Project,
+    ProjectCard,
+    ProjectCardActivity,
+    ProjectCardCreate,
+    ProjectCreate,
+)
 
 
 def database_path() -> str:
@@ -22,45 +28,68 @@ def get_connection():
     return conn
 
 
-def init_db() -> None:
-    with get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS projects (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS project_cards (
-                id TEXT PRIMARY KEY,
-                project_id TEXT NOT NULL,
-                card_type TEXT NOT NULL,
-                title TEXT NOT NULL,
-                description TEXT,
-                comments TEXT,
-                status TEXT NOT NULL,
-                start_date TEXT,
-                due_date TEXT,
-                parent_id TEXT,
-                dependency_ids TEXT NOT NULL DEFAULT '[]',
-                deliverables TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
-                FOREIGN KEY(parent_id) REFERENCES project_cards(id) ON DELETE SET NULL
-            )
-        """)
-        ensure_project_card_columns(conn)
+def applied_migrations(conn: sqlite3.Connection) -> set[int]:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )
+    """)
+    rows = conn.execute("SELECT version FROM schema_migrations").fetchall()
+    return {row["version"] for row in rows}
 
 
-def ensure_project_card_columns(conn: sqlite3.Connection) -> None:
-    columns = {
+def record_migration(conn: sqlite3.Connection, version: int, name: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO schema_migrations (version, name, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (version, name, datetime.now(timezone.utc).isoformat()),
+    )
+
+
+def project_card_columns(conn: sqlite3.Connection) -> set[str]:
+    return {
         row["name"]
         for row in conn.execute("PRAGMA table_info(project_cards)").fetchall()
     }
+
+
+def migration_001_create_project_tables(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_cards (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            card_type TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            status TEXT NOT NULL,
+            due_date TEXT,
+            parent_id TEXT,
+            deliverables TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY(parent_id) REFERENCES project_cards(id) ON DELETE SET NULL
+        )
+    """)
+
+
+def migration_002_add_card_scheduling_comments_and_dependencies(
+    conn: sqlite3.Connection,
+) -> None:
+    columns = project_card_columns(conn)
     if "start_date" not in columns:
         conn.execute("ALTER TABLE project_cards ADD COLUMN start_date TEXT")
     if "comments" not in columns:
@@ -69,6 +98,43 @@ def ensure_project_card_columns(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE project_cards ADD COLUMN dependency_ids TEXT NOT NULL DEFAULT '[]'"
         )
+
+
+def migration_003_create_card_activity(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS project_card_activity (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL,
+            card_id TEXT NOT NULL,
+            field_name TEXT NOT NULL,
+            old_value TEXT,
+            new_value TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+            FOREIGN KEY(card_id) REFERENCES project_cards(id) ON DELETE CASCADE
+        )
+    """)
+
+
+MIGRATIONS = [
+    (1, "create_project_tables", migration_001_create_project_tables),
+    (
+        2,
+        "add_card_scheduling_comments_and_dependencies",
+        migration_002_add_card_scheduling_comments_and_dependencies,
+    ),
+    (3, "create_card_activity", migration_003_create_card_activity),
+]
+
+
+def init_db() -> None:
+    with get_connection() as conn:
+        applied = applied_migrations(conn)
+        for version, name, migration in MIGRATIONS:
+            if version in applied:
+                continue
+            migration(conn)
+            record_migration(conn, version, name)
 
 
 def now_iso() -> str:
@@ -102,6 +168,65 @@ def card_from_row(row: sqlite3.Row) -> ProjectCard:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
+
+
+def activity_from_row(row: sqlite3.Row) -> ProjectCardActivity:
+    return ProjectCardActivity(
+        id=row["id"],
+        project_id=row["project_id"],
+        card_id=row["card_id"],
+        field_name=row["field_name"],
+        old_value=row["old_value"],
+        new_value=row["new_value"],
+        created_at=row["created_at"],
+    )
+
+
+def serialize_activity_value(value: object) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    if isinstance(value, list):
+        return json.dumps(value)
+    return str(value)
+
+
+def record_card_activity(
+    conn: sqlite3.Connection,
+    before: ProjectCard,
+    after: ProjectCard,
+) -> None:
+    tracked_fields = ("status", "start_date", "due_date", "parent_id", "comments")
+    created_at = now_iso()
+    for field_name in tracked_fields:
+        old_value = getattr(before, field_name)
+        new_value = getattr(after, field_name)
+        if old_value == new_value:
+            continue
+
+        activity = ProjectCardActivity(
+            project_id=after.project_id,
+            card_id=after.id,
+            field_name=field_name,
+        )
+        conn.execute(
+            """
+            INSERT INTO project_card_activity (
+                id, project_id, card_id, field_name, old_value, new_value, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                activity.id,
+                activity.project_id,
+                activity.card_id,
+                activity.field_name,
+                serialize_activity_value(old_value),
+                serialize_activity_value(new_value),
+                created_at,
+            ),
+        )
 
 
 def list_projects() -> list[Project]:
@@ -204,6 +329,10 @@ def create_card(data: ProjectCardCreate) -> ProjectCard:
 def update_card(card: ProjectCard) -> ProjectCard:
     card.updated_at = datetime.now(timezone.utc)
     with get_connection() as conn:
+        before_row = conn.execute(
+            "SELECT * FROM project_cards WHERE id = ?", (card.id,)
+        ).fetchone()
+        before = card_from_row(before_row) if before_row else None
         conn.execute(
             """
             UPDATE project_cards
@@ -227,6 +356,8 @@ def update_card(card: ProjectCard) -> ProjectCard:
                 card.id,
             ),
         )
+        if before:
+            record_card_activity(conn, before, card)
     return card
 
 
@@ -252,3 +383,16 @@ def serialize_card(card: ProjectCard) -> tuple[object, ...]:
         card.created_at.isoformat(),
         card.updated_at.isoformat(),
     )
+
+
+def list_card_activity(card_id: str) -> list[ProjectCardActivity]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT * FROM project_card_activity
+            WHERE card_id = ?
+            ORDER BY created_at DESC
+            """,
+            (card_id,),
+        ).fetchall()
+    return [activity_from_row(row) for row in rows]

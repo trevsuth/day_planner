@@ -8,6 +8,7 @@ from app_projmgmt.database import (
     get_card,
     get_project,
     init_db,
+    list_card_activity,
     list_cards,
     list_projects,
     update_card,
@@ -17,6 +18,7 @@ from app_projmgmt.models import (
     CardType,
     Project,
     ProjectCard,
+    ProjectCardActivity,
     ProjectCardCreate,
     ProjectCardUpdate,
     ProjectCreate,
@@ -89,6 +91,14 @@ def get_card_by_id(card_id: str) -> ProjectCard:
     if not card:
         raise HTTPException(status_code=404, detail="Card not found.")
     return card
+
+
+@router.get("/cards/{card_id}/activity", response_model=list[ProjectCardActivity])
+def get_card_activity(card_id: str) -> list[ProjectCardActivity]:
+    card = get_card(card_id)
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found.")
+    return list_card_activity(card_id)
 
 
 @router.put("/cards/{card_id}", response_model=ProjectCard)

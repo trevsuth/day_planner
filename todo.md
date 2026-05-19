@@ -12,7 +12,7 @@
    - Open Timeline, Gantt, and Calendar views
    - Assign a project card to a future planner priority
    - Create a dependency date conflict and verify the Issues view
-2. Add a versioned database migration strategy
+2. [x] Add a versioned database migration strategy
    - Replace ad hoc schema updates with ordered migrations
    - Track applied migration version
    - Add migration tests for existing planner and project databases
@@ -36,7 +36,7 @@
    - Track blocked-by relationships separately from parent-child hierarchy
    - Surface dependency warnings in Roadmap, Timeline, Gantt, and Calendar
    - Add Issues view for blocked dependencies and dependency date conflicts
-5. Add activity history / audit log
+5. [x] Add activity history / audit log
    - Track status changes
    - Track date changes
    - Track parent changes

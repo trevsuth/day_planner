@@ -1367,7 +1367,8 @@ textarea {
 .deliverables-editor > header,
 .planner-assignment-panel > header,
 .dependencies-editor > header,
-.card-warning-panel > header {
+.card-warning-panel > header,
+.activity-editor > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1602,7 +1603,8 @@ textarea {
 }
 
 .card-warning-panel h3,
-.dependencies-editor h3 {
+.dependencies-editor h3,
+.activity-editor h3 {
   margin: 0;
 }
 
@@ -1730,6 +1732,61 @@ textarea {
 .deliverables-editor {
   display: grid;
   gap: 10px;
+}
+
+.activity-editor {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(5, 16, 21, 0.72);
+}
+
+.activity-editor > header > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.activity-editor > header > span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.activity-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-list li {
+  display: grid;
+  grid-template-columns: 110px 92px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(91, 210, 234, 0.2);
+  background: rgba(3, 10, 14, 0.52);
+  font-size: 0.82rem;
+}
+
+.activity-list time {
+  color: var(--dim);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.activity-list strong {
+  color: var(--line-strong);
+}
+
+.activity-list span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
 }
 
 .comments-editor {
@@ -1962,6 +2019,7 @@ textarea {
   .planner-assignment-panel > div,
   .dependency-option,
   .linked-card,
+  .activity-list li,
   .comments-editor,
   .overview-summary-grid {
     grid-template-columns: 1fr;

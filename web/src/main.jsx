@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Clock,
   Download,
   GitBranch,
   FolderKanban,
@@ -38,6 +39,14 @@ const cardTypeLabels = {
   feature: "Feature",
   story: "Story",
   subtask: "Subtask",
+};
+
+const activityFieldLabels = {
+  status: "Status",
+  start_date: "Start date",
+  due_date: "Due date",
+  parent_id: "Parent",
+  comments: "Comments",
 };
 
 const parentTypeByCardType = {
@@ -156,6 +165,31 @@ function safeFilePart(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "project";
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatActivityValue(fieldName, value, cards) {
+  if (!value) return "None";
+  if (fieldName === "status") return statusLabels[value] || value;
+  if (fieldName === "parent_id") {
+    const parent = cards.find((card) => card.id === value);
+    return parent ? `${cardTypeLabels[parent.card_type]}: ${parent.title}` : value;
+  }
+  if (fieldName === "comments") {
+    const compact = value.replace(/\s+/g, " ").trim();
+    if (!compact) return "None";
+    return compact.length > 80 ? `${compact.slice(0, 77)}...` : compact;
+  }
+  return value;
 }
 
 function loadStoredProjectState() {
@@ -708,6 +742,7 @@ function ProjectsApp() {
   const [activeProjectId, setActiveProjectId] = useState(storedProjectState.activeProjectId || "");
   const [cards, setCards] = useState([]);
   const [projectCardsById, setProjectCardsById] = useState({});
+  const [cardActivityById, setCardActivityById] = useState({});
   const [projectView, setProjectView] = useState(
     PROJECT_VIEWS.includes(storedProjectState.projectView) ? storedProjectState.projectView : "portfolio",
   );
@@ -725,6 +760,8 @@ function ProjectsApp() {
   const searchInputRef = useRef(null);
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
+  const selectedCardId = selectedCard?.id || "";
+  const selectedCardActivity = selectedCardId ? cardActivityById[selectedCardId] || [] : [];
   const filteredCards = cards.filter((card) => cardMatchesFilters(card, projectFilters));
   const filteredProjectCardsById = Object.fromEntries(
     Object.entries(projectCardsById).map(([projectId, projectCards]) => [
@@ -750,6 +787,12 @@ function ProjectsApp() {
       setCards([]);
     }
   }, [activeProjectId]);
+
+  useEffect(() => {
+    if (selectedCardId) {
+      loadCardActivity(selectedCardId);
+    }
+  }, [selectedCardId]);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -920,6 +963,15 @@ function ProjectsApp() {
     } catch (err) {
       setError("Could not load project cards.");
       setStatus("Offline");
+    }
+  }
+
+  async function loadCardActivity(cardId) {
+    try {
+      const data = await request(`/api/projmgmt/cards/${cardId}/activity`);
+      setCardActivityById((current) => ({ ...current, [cardId]: data }));
+    } catch (err) {
+      setError("Could not load card activity.");
     }
   }
 
@@ -1456,6 +1508,7 @@ function ProjectsApp() {
 
       {selectedCard ? (
         <CardEditor
+          activity={selectedCardActivity}
           card={selectedCard}
           cards={cards}
           onCancel={() => setSelectedCard(null)}
@@ -1551,6 +1604,11 @@ const projectEndpoints = [
     purpose: "Load one card.",
   },
   {
+    method: "GET",
+    path: "/api/projmgmt/cards/{card_id}/activity",
+    purpose: "List tracked status, date, parent, and comment changes for one card.",
+  },
+  {
     method: "PUT",
     path: "/api/projmgmt/cards/{card_id}",
     purpose: "Update card details, status, hierarchy, dates, comments, and deliverables.",
@@ -1630,6 +1688,21 @@ function ApiReference() {
   "parent_id": "epic-id",
   "dependency_ids": ["api-contract-card-id"],
   "deliverables": ["Timeline", "Gantt"]
+}`}
+          />
+        </section>
+
+        <section className="api-panel">
+          <h2>Project Card Activity</h2>
+          <CodeBlock
+            value={`{
+  "id": "activity-id",
+  "project_id": "project-id",
+  "card_id": "card-id",
+  "field_name": "status",
+  "old_value": "backlog",
+  "new_value": "in_progress",
+  "created_at": "2026-05-18T14:30:00Z"
 }`}
           />
         </section>
@@ -2420,7 +2493,7 @@ function ProjectEditor({ cards, onCancel, onChange, onCreateEpic, onDelete, onOp
   );
 }
 
-function CardEditor({ card, cards, onAssignToPlanner, onCancel, onChange, onCreateChild, onDelete, onSubmit }) {
+function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChange, onCreateChild, onDelete, onSubmit }) {
   const defaultPlannerDate = card.due_date || card.start_date || formatDateInput(new Date());
   const [plannerDate, setPlannerDate] = useState(defaultPlannerDate);
   const [plannerAssignStatus, setPlannerAssignStatus] = useState("");
@@ -2720,11 +2793,43 @@ function CardEditor({ card, cards, onAssignToPlanner, onCancel, onChange, onCrea
           ))}
         </section>
 
+        {card.id ? <CardActivity activity={activity} cards={cards} /> : null}
+
         <button className="secondary-button" type="button" onClick={onCancel}>
           Cancel
         </button>
       </form>
     </div>
+  );
+}
+
+function CardActivity({ activity, cards }) {
+  return (
+    <section className="activity-editor">
+      <header>
+        <div>
+          <Clock size={18} />
+          <h3>Activity</h3>
+        </div>
+        <span>{activity.length} changes</span>
+      </header>
+      {activity.length ? (
+        <ol className="activity-list">
+          {activity.map((item) => (
+            <li key={item.id}>
+              <time>{formatDateTime(item.created_at)}</time>
+              <strong>{activityFieldLabels[item.field_name] || item.field_name}</strong>
+              <span>
+                {formatActivityValue(item.field_name, item.old_value, cards)} {"->"}{" "}
+                {formatActivityValue(item.field_name, item.new_value, cards)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="empty-overview">No tracked changes yet.</p>
+      )}
+    </section>
   );
 }
 

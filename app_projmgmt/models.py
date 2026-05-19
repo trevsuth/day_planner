@@ -62,6 +62,16 @@ class ProjectCard(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now)
 
 
+class ProjectCardActivity(BaseModel):
+    id: str = Field(default_factory=new_id)
+    project_id: str
+    card_id: str
+    field_name: str
+    old_value: str | None = None
+    new_value: str | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class ProjectCardCreate(BaseModel):
     project_id: str
     card_type: CardType

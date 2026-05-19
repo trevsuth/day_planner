@@ -19,6 +19,7 @@ from app_projmgmt.database import (
     get_card,
     get_project,
     init_db,
+    list_card_activity,
     list_cards,
     list_projects,
     update_card,
@@ -102,6 +103,70 @@ def test_update_card(temp_db):
     assert get_card(card.id).due_date == date(2026, 6, 4)
     assert get_card(card.id).dependency_ids == []
     assert get_card(card.id).deliverables == ["OAuth flow"]
+
+
+def test_update_card_records_activity_for_tracked_fields(temp_db):
+    project = create_project(ProjectCreate(name="Audit trail"))
+    epic = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Parent epic",
+        )
+    )
+    other_epic = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Other epic",
+        )
+    )
+    card = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.FEATURE,
+            title="Tracked feature",
+            parent_id=epic.id,
+        )
+    )
+
+    card.status = CardStatus.IN_PROGRESS
+    card.start_date = date(2026, 6, 1)
+    card.due_date = date(2026, 6, 5)
+    card.parent_id = other_epic.id
+    card.comments = "Ready for review"
+    update_card(card)
+
+    activity = list_card_activity(card.id)
+    changed_fields = {item.field_name for item in activity}
+
+    assert changed_fields == {
+        "status",
+        "start_date",
+        "due_date",
+        "parent_id",
+        "comments",
+    }
+    assert (
+        next(item for item in activity if item.field_name == "status").old_value
+        == "backlog"
+    )
+    assert (
+        next(item for item in activity if item.field_name == "status").new_value
+        == "in_progress"
+    )
+    assert (
+        next(item for item in activity if item.field_name == "comments").new_value
+        == "Ready for review"
+    )
+    assert (
+        next(item for item in activity if item.field_name == "parent_id").old_value
+        == epic.id
+    )
+    assert (
+        next(item for item in activity if item.field_name == "parent_id").new_value
+        == other_epic.id
+    )
 
 
 def test_delete_project_removes_cards(temp_db):
@@ -231,6 +296,14 @@ def test_init_db_adds_new_columns_to_existing_cards_table(monkeypatch):
             row["name"]
             for row in conn.execute("PRAGMA table_info(project_cards)").fetchall()
         }
+        migrations = conn.execute(
+            "SELECT version, name FROM schema_migrations ORDER BY version"
+        ).fetchall()
 
     assert {"start_date", "comments", "dependency_ids"}.issubset(columns)
+    assert [(row["version"], row["name"]) for row in migrations] == [
+        (1, "create_project_tables"),
+        (2, "add_card_scheduling_comments_and_dependencies"),
+        (3, "create_card_activity"),
+    ]
     os.remove(path)

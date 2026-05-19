@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -19,17 +20,53 @@ def get_connection():
     return sqlite3.connect(db_path)
 
 
+def applied_migrations(conn: sqlite3.Connection) -> set[int]:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )
+    """)
+    rows = conn.execute("SELECT version FROM schema_migrations").fetchall()
+    return {row[0] for row in rows}
+
+
+def record_migration(conn: sqlite3.Connection, version: int, name: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO schema_migrations (version, name, applied_at)
+        VALUES (?, ?, ?)
+        """,
+        (version, name, datetime.now(timezone.utc).isoformat()),
+    )
+
+
+def migration_001_create_planner(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS planner (
+        entry_date TEXT PRIMARY KEY,
+        priorities TEXT,
+        tasks TEXT,
+        schedule TEXT,
+        notes TEXT
+        )
+    """)
+
+
+MIGRATIONS = [
+    (1, "create_planner", migration_001_create_planner),
+]
+
+
 def init_db():
     with get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS planner (
-            entry_date TEXT PRIMARY KEY,
-            priorities TEXT,
-            tasks TEXT,
-            schedule TEXT,
-            notes TEXT
-            )
-        """)
+        applied = applied_migrations(conn)
+        for version, name, migration in MIGRATIONS:
+            if version in applied:
+                continue
+            migration(conn)
+            record_migration(conn, version, name)
 
 
 def save_entry(entry: PlannerEntry):
