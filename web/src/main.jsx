@@ -272,8 +272,8 @@ function cardPayload(card, overrides = {}) {
     description: overrides.description ?? card.description ?? null,
     comments: overrides.comments ?? card.comments ?? null,
     status: overrides.status ?? card.status,
-    start_date: overrides.start_date ?? card.start_date ?? null,
-    due_date: overrides.due_date ?? card.due_date ?? null,
+    start_date: overrides.start_date !== undefined ? overrides.start_date : card.start_date ?? null,
+    due_date: overrides.due_date !== undefined ? overrides.due_date : card.due_date ?? null,
     parent_id: overrides.parent_id ?? card.parent_id ?? null,
     dependency_ids: overrides.dependency_ids ?? card.dependency_ids ?? [],
     deliverables: overrides.deliverables ?? card.deliverables ?? [],
@@ -1485,6 +1485,32 @@ function ProjectsApp() {
     }
   }
 
+  async function savePreviewDates(card, dates) {
+    if (dates.start_date && dates.due_date && dates.start_date > dates.due_date) {
+      setError("Start date must be on or before due date.");
+      return false;
+    }
+
+    try {
+      const saved = await request(`/api/projmgmt/cards/${card.id}`, {
+        method: "PUT",
+        body: JSON.stringify(
+          cardPayload(card, {
+            start_date: dates.start_date || null,
+            due_date: dates.due_date || null,
+          }),
+        ),
+      });
+      updateCardsAfterSave([saved]);
+      setError("");
+      setStatus("Schedule updated");
+      return true;
+    } catch (err) {
+      setError(err.message);
+      return false;
+    }
+  }
+
   async function saveCard(event) {
     event?.preventDefault();
     await saveSelectedCard();
@@ -2068,6 +2094,7 @@ function ProjectsApp() {
           onClose={() => setPreviewCard(null)}
           onEdit={(card) => setSelectedCard(card)}
           onMoveCard={moveCardToStatus}
+          onSaveDates={projectView === "gantt" ? savePreviewDates : null}
         />
       ) : null}
 
@@ -3314,10 +3341,32 @@ function ProjectSummaryChips({ summary }) {
   );
 }
 
-function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard }) {
+function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onSaveDates }) {
+  const [dateDraft, setDateDraft] = useState({
+    start_date: card.start_date || "",
+    due_date: card.due_date || "",
+  });
+  const [dateSaveState, setDateSaveState] = useState("");
   const parentCard = cards.find((candidate) => candidate.id === card.parent_id);
   const childCount = cards.filter((candidate) => candidate.parent_id === card.id).length;
   const issues = allCardIssues(card, cards);
+  const ganttSchedule = onSaveDates ? ganttScheduleForCard(card, cards) : null;
+  const datesChanged = dateDraft.start_date !== (card.start_date || "") || dateDraft.due_date !== (card.due_date || "");
+  const datesInvalid = Boolean(dateDraft.start_date && dateDraft.due_date && dateDraft.start_date > dateDraft.due_date);
+
+  useEffect(() => {
+    setDateDraft({
+      start_date: card.start_date || "",
+      due_date: card.due_date || "",
+    });
+    setDateSaveState("");
+  }, [card.id, card.start_date, card.due_date]);
+
+  async function saveDates() {
+    if (datesInvalid) return;
+    const saved = await onSaveDates(card, dateDraft);
+    if (saved) setDateSaveState("Saved");
+  }
 
   return (
     <aside className="card-preview-panel" aria-label="Selected card preview">
@@ -3340,14 +3389,18 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard }) {
           <span>Parent</span>
           <strong>{parentCard ? parentCard.title : "Project root"}</strong>
         </div>
-        <div>
-          <span>Start</span>
-          <strong>{card.start_date || "None"}</strong>
-        </div>
-        <div>
-          <span>Due</span>
-          <strong>{card.due_date || "None"}</strong>
-        </div>
+        {!onSaveDates ? (
+          <>
+            <div>
+              <span>Start</span>
+              <strong>{card.start_date || "None"}</strong>
+            </div>
+            <div>
+              <span>Due</span>
+              <strong>{card.due_date || "None"}</strong>
+            </div>
+          </>
+        ) : null}
         <div>
           <span>Children</span>
           <strong>{childCount}</strong>
@@ -3357,6 +3410,53 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard }) {
           <strong>{card.deliverables?.length || 0}</strong>
         </div>
       </div>
+
+      {onSaveDates ? (
+        <section className="preview-schedule-editor">
+          <header>
+            <h3>Schedule</h3>
+            {dateSaveState && !datesChanged ? <span>{dateSaveState}</span> : null}
+          </header>
+          {ganttSchedule?.isDerived ? (
+            <p>Shown on chart as {ganttSchedule.start} to {ganttSchedule.end} using descendant dates.</p>
+          ) : null}
+          <div>
+            <label>
+              <span>Start Date</span>
+              <input
+                type="date"
+                value={dateDraft.start_date}
+                onChange={(event) => {
+                  setDateDraft((current) => ({ ...current, start_date: event.target.value }));
+                  setDateSaveState("");
+                }}
+              />
+            </label>
+            <label>
+              <span>End Date</span>
+              <input
+                type="date"
+                min={dateDraft.start_date || undefined}
+                value={dateDraft.due_date}
+                onChange={(event) => {
+                  setDateDraft((current) => ({ ...current, due_date: event.target.value }));
+                  setDateSaveState("");
+                }}
+              />
+            </label>
+          </div>
+          {datesInvalid ? <p className="preview-schedule-error">End date must be on or after start date.</p> : null}
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!datesChanged || datesInvalid}
+            onClick={saveDates}
+          >
+            <Save size={18} />
+            <span>Save Dates</span>
+          </button>
+        </section>
+      ) : null}
 
       {card.description ? <p>{card.description}</p> : <p className="empty-overview">No description.</p>}
 

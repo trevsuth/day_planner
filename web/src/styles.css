@@ -2060,6 +2060,107 @@ textarea {
   background: rgba(42, 15, 16, 0.56);
 }
 
+.preview-schedule-editor {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(91, 210, 234, 0.28);
+  background:
+    linear-gradient(135deg, rgba(91, 210, 234, 0.08), transparent 34%),
+    rgba(3, 10, 14, 0.62);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.preview-schedule-editor header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-schedule-editor h3,
+.preview-schedule-editor header span,
+.preview-schedule-editor label span {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.preview-schedule-editor header span {
+  color: var(--green);
+}
+
+.preview-schedule-editor > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preview-schedule-editor label {
+  display: grid;
+  gap: 6px;
+}
+
+.preview-schedule-editor input {
+  width: 100%;
+  min-height: 42px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid rgba(91, 210, 234, 0.38);
+  background:
+    linear-gradient(180deg, rgba(91, 210, 234, 0.07), transparent),
+    rgba(2, 8, 12, 0.9);
+  color: var(--text);
+  color-scheme: dark;
+  outline: none;
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.preview-schedule-editor input:hover {
+  border-color: rgba(91, 210, 234, 0.62);
+}
+
+.preview-schedule-editor input:focus {
+  border-color: var(--line-strong);
+  background:
+    linear-gradient(180deg, rgba(91, 210, 234, 0.12), transparent),
+    rgba(2, 8, 12, 0.96);
+  box-shadow:
+    inset 0 -2px 0 var(--line-strong),
+    0 0 0 2px rgba(91, 210, 234, 0.16),
+    0 0 18px rgba(91, 210, 234, 0.13);
+}
+
+.preview-schedule-editor input::-webkit-calendar-picker-indicator {
+  border: 1px solid rgba(91, 210, 234, 0.22);
+  background-color: rgba(91, 210, 234, 0.1);
+  cursor: pointer;
+  filter: invert(84%) sepia(19%) saturate(1183%) hue-rotate(148deg) brightness(98%) contrast(89%);
+}
+
+.preview-schedule-editor .preview-schedule-error {
+  padding: 7px 9px;
+  border-left: 2px solid var(--danger);
+  background: rgba(255, 107, 93, 0.08);
+  color: var(--danger);
+}
+
+.preview-schedule-editor .secondary-button {
+  min-height: 40px;
+  justify-content: center;
+  border-color: rgba(91, 210, 234, 0.42);
+}
+
+.preview-schedule-editor .secondary-button:not(:disabled):hover {
+  border-color: var(--line-strong);
+  background: rgba(91, 210, 234, 0.13);
+}
+
 .preview-issues ul {
   display: grid;
   gap: 6px;

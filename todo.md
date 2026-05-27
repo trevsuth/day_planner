@@ -1,108 +1,64 @@
-# ToDo Items
+# Todo
 
-## 1. Immediate
+## Product Direction
 
-1. Create Playwright smoke tests for the web app
-   - Load Planner
-   - Load Projects
-   - Open the API Reference tab
-   - Create a project
-   - Create and edit a card
-   - Drag a card between Kanban columns
-   - Open Timeline, Gantt, and Calendar views
-   - Assign a project card to a future planner priority
-   - Create a dependency date conflict and verify the Issues view
-2. [x] Add a versioned database migration strategy
-   - Replace ad hoc schema updates with ordered migrations
-   - Track applied migration version
-   - Add migration tests for existing planner and project databases
-## 2. Project Manager
+Keep the application lightweight in day-to-day use:
 
-1. [x] Add project filters and search
-   - Filter Kanban by epics, features, stories, and subtasks
-   - Filter by status, blocked, overdue, due soon, and unassigned dates
-   - Add text search across project/card title, description, comments, and deliverables
-2. [x] Improve mouseless navigation in the web interface
-   - Do this without cluttering the UI
-   - Add shortcuts for switching project views
-   - Add selection movement with keyboard commands
-   - Add quick search focus
-   - Add open/close/save card shortcuts
-3. [x] Add saved view state
-   - Remember active project
-   - Remember active project view
-   - Remember filters and search text
-4. [x] Add card dependencies
-   - Track blocked-by relationships separately from parent-child hierarchy
-   - Surface dependency warnings in Roadmap, Timeline, Gantt, and Calendar
-   - Add Issues view for blocked dependencies and dependency date conflicts
-5. [x] Add activity history / audit log
-   - Track status changes
-   - Track date changes
-   - Track parent changes
-   - Track comment changes
-6. [x] Add bulk edit actions
-   - Bulk status change
-   - Bulk date change
-   - Bulk card type change where hierarchy rules allow it
-7. Create an Artifact Repository / wiki
-   - Attach reference notes to projects or cards
-   - Link artifacts from card comments
-8. [x] Add dependency graph view
-   - Visualize blocked-by relationships separately from hierarchy
-   - Highlight blocked chains and date conflicts
-   - Open cards directly from graph nodes
-9. Add card templates
-   - Template common epic, feature, story, and subtask structures
-   - Pre-fill deliverables, descriptions, and starter child cards
+- Prefer fast capture, clear scheduling, and reliable local data over additional views.
+- Keep infrequent administration behind compact drawers, panels, or command recipes.
+- Add new concepts only when they reduce repeated manual work in both the web app and TUI.
+- Do not maintain completed work in this file; completed changes are recorded in git history.
 
-## 3. Planner
+## Immediate
 
-1. Investigate planner and project manager linking
-   - [x] Assign project cards to planner priorities for future dates
-   - Store a durable link from planner priority back to the project card
-   - Link daily planner tasks to project cards
-   - Generate planner tasks from project cards
-   - Show scheduled project work in the planner
-   - Optionally update project card status when linked planner tasks are completed
-2. Improve TUI card navigation
-   - Make card selection clearer
-   - Add jump-to-card or search in the TUI
-   - Reduce friction when moving between card list and edit fields
-3. Add recurring planner tasks
-   - Daily, weekly, monthly recurrence
-   - Optional end date
-   - Skip/completion behavior
-4. Add planner capacity warnings
-   - Warn when future priorities are already full
-   - Surface cards assigned to the same date
-   - Suggest open planning dates based on due date and dependency timing
+1. Create durable links between planner priorities and project cards
+   - Store card IDs with assigned planner priorities instead of only copied label text.
+   - Show a small linked-card indicator in the planner and open the card from it.
+   - Allow rescheduling or unlinking a card without duplicating priority text.
+   - Handle deleted cards without breaking existing planner days.
 
-## 4. Data and Platform
+2. Add simple backup and restore for local data
+   - Provide export and restore for both planner and project data.
+   - Support local runs and Docker/Podman-hosted runs with documented recipes.
+   - Use a portable backup format or archive that does not require database tooling.
+   - Confirm restores into a fresh local database with automated coverage.
 
-1. Enable database import/export
-   - JSON export
-   - JSON import
-   - Backup/restore workflow
-2. Enable use of an external database
-   - Configurable database path first
-   - Consider Postgres later only if needed
-3. Create MCP server
-   - Expose planner entries
-   - Expose projects and cards
-   - Support safe create/update actions
-4. Add structured application settings
-   - [x] Configure database paths
-   - Configure CORS/frontend hostnames
-   - Share settings between local, packaged, and Docker runs
+3. Improve schedule editing feedback without adding permanent UI
+   - Identify the descendant that determines each derived parent boundary.
+   - Make schedule warnings actionable by opening the conflicting child or dependency.
 
-## 5. Completed
+## Next
 
-1. [x] Add Start Date to Card
-2. [x] Add Timeline
-3. [x] Create Gantt chart view
-4. [x] Create Calendar View
-5. [x] Enable drag and drop of cards between columns in Kanban
-6. [x] Enable Markdown/MMD support in card comments
-7. [x] Add API Reference tab
-8. [x] Add Docker Compose hosting
+1. Improve TUI project-card navigation
+   - Add quick search or jump-to-card.
+   - Make selection and parent-child context clearer.
+   - Reduce steps between selecting a card and editing its key fields.
+
+2. Add recurring planner tasks
+   - Support daily, weekly, and monthly recurrence with an optional end date.
+   - Keep exceptions and skipped occurrences simple and understandable.
+
+3. Add lightweight capacity warnings
+   - Warn when a future day already has all priority slots filled.
+   - Surface multiple cards assigned to the same day.
+   - Avoid automated scheduling until manual planning behavior is well understood.
+
+4. Add reusable card templates
+   - Pre-fill descriptions and deliverables for common card types.
+   - Allow optional starter child cards.
+   - Keep templates optional and out of the primary creation flow.
+
+## Later
+
+1. Add a reference-notes repository for projects and cards
+   - Start with linked notes rather than a full wiki or document-management system.
+
+2. Add structured application settings
+   - Configure CORS and frontend hostnames only when non-local deployments require it.
+   - Keep SQLite and per-machine local storage as the default.
+
+3. Evaluate an external database option
+   - Consider Postgres only if multi-user hosting or concurrency becomes a real need.
+
+4. Evaluate an MCP server
+   - Expose planner and project actions only after data contracts and backup behavior are stable.

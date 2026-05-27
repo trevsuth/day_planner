@@ -8,6 +8,10 @@ default:
 test:
     pytest
 
+# Run focused browser smoke tests with isolated test databases
+web-test:
+    npm --prefix web run test:e2e
+
 # Run the API server for the React frontend
 api:
     uv run uvicorn app_planner.api:app --reload

@@ -163,6 +163,21 @@ List available task shortcuts:
 just
 ```
 
+Run the Python test suite:
+
+```bash
+just test
+```
+
+Run the focused browser smoke tests. Install Playwright's Chromium runtime once on each development machine:
+
+```bash
+npx --prefix web playwright install chromium
+just web-test
+```
+
+The browser tests build the frontend, start an isolated local API server, and use temporary planner and project databases rather than your local application data.
+
 ## API
 
 The web frontend talks to the FastAPI app through these endpoints:
@@ -293,6 +308,7 @@ Available `just` recipes:
 | --- | --- |
 | `just` | List all available recipes |
 | `just test` | Run the Python test suite |
+| `just web-test` | Run focused Playwright browser smoke tests using isolated databases |
 | `just dev` | Run the API and React development servers together |
 | `just host-up` | Build and run the hosted container app using `CONTAINER_COMPOSE`, defaulting to Docker Compose |
 | `just host-down` | Stop the hosted container app |
