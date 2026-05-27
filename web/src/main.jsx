@@ -693,9 +693,16 @@ function PlannerApp() {
   const [entry, setEntry] = useState(() => normalizeEntry({}, today));
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
+  const entryRef = useRef(entry);
+  const entryDateRef = useRef(entryDate);
+  const changeVersionRef = useRef(0);
+  const saveInFlightRef = useRef(null);
+  const savedStatusTimeoutRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
+    entryDateRef.current = entryDate;
 
     async function loadEntry() {
       setStatus("loading");
@@ -706,12 +713,18 @@ function PlannerApp() {
         if (!response.ok) throw new Error(`Request failed with ${response.status}`);
         const data = await response.json();
         if (!cancelled) {
-          setEntry(normalizeEntry(data, entryDate));
+          const nextEntry = normalizeEntry(data, entryDate);
+          entryRef.current = nextEntry;
+          setEntry(nextEntry);
+          setIsDirty(false);
           setStatus("idle");
         }
       } catch (err) {
         if (!cancelled) {
-          setEntry(normalizeEntry({}, entryDate));
+          const nextEntry = normalizeEntry({}, entryDate);
+          entryRef.current = nextEntry;
+          setEntry(nextEntry);
+          setIsDirty(false);
           setError("Could not load this planner entry.");
           setStatus("error");
         }
@@ -724,37 +737,93 @@ function PlannerApp() {
     };
   }, [entryDate]);
 
+  useEffect(() => {
+    if (!isDirty || status === "loading" || status === "saving" || status === "error") return undefined;
+    const timeout = window.setTimeout(() => {
+      saveEntry();
+    }, 650);
+    return () => window.clearTimeout(timeout);
+  }, [entry, entryDate, isDirty, status]);
+
+  useEffect(
+    () => () => {
+      if (savedStatusTimeoutRef.current) {
+        window.clearTimeout(savedStatusTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
   function updateEntry(updater) {
-    setEntry((current) => updater({ ...current }));
+    setEntry((current) => {
+      const nextEntry = updater({ ...current });
+      entryRef.current = nextEntry;
+      return nextEntry;
+    });
+    changeVersionRef.current += 1;
+    setIsDirty(true);
+    setError("");
+    setStatus((current) => (current === "saved" || current === "error" ? "idle" : current));
   }
 
   async function saveEntry() {
-    const payload = compactEntry(entry);
+    if (saveInFlightRef.current) {
+      await saveInFlightRef.current;
+    }
+
+    const dateToSave = entryDateRef.current;
+    const versionToSave = changeVersionRef.current;
+    const payload = compactEntry(entryRef.current);
     setStatus("saving");
     setError("");
 
     try {
-      const response = await fetch(`/api/planner/entries/${entryDate}`, {
+      const request = fetch(`/api/planner/entries/${dateToSave}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      saveInFlightRef.current = request;
+      const response = await request;
       if (!response.ok) throw new Error(`Request failed with ${response.status}`);
       const data = await response.json();
-      setEntry(normalizeEntry(data, entryDate));
-      setStatus("saved");
-      window.setTimeout(() => setStatus((current) => (current === "saved" ? "idle" : current)), 1500);
+      if (dateToSave === entryDateRef.current && versionToSave === changeVersionRef.current) {
+        const nextEntry = normalizeEntry(data, dateToSave);
+        entryRef.current = nextEntry;
+        setEntry(nextEntry);
+        setIsDirty(false);
+        setStatus("saved");
+        if (savedStatusTimeoutRef.current) {
+          window.clearTimeout(savedStatusTimeoutRef.current);
+        }
+        savedStatusTimeoutRef.current = window.setTimeout(
+          () => setStatus((current) => (current === "saved" ? "idle" : current)),
+          1500,
+        );
+      } else {
+        setStatus("idle");
+      }
+      return true;
     } catch (err) {
       setStatus("error");
       setError("Could not save this planner entry.");
+      return false;
+    } finally {
+      saveInFlightRef.current = null;
     }
   }
 
   async function moveDay(amount) {
-    if (status !== "loading") {
-      await saveEntry();
-    }
+    if (status === "loading") return;
+    if (isDirty && !(await saveEntry())) return;
     setEntryDate((current) => addDays(current, amount));
+  }
+
+  async function selectDate(nextDate) {
+    if (nextDate === entryDate) return;
+    if (status === "loading") return;
+    if (isDirty && !(await saveEntry())) return;
+    setEntryDate(nextDate);
   }
 
   const statusLabel =
@@ -764,6 +833,8 @@ function PlannerApp() {
         ? "Saving"
         : status === "saved"
           ? "Saved"
+          : isDirty
+            ? "Unsaved changes"
           : error
             ? "Offline"
             : "Ready";
@@ -787,7 +858,7 @@ function PlannerApp() {
             aria-label="Planner date"
             type="date"
             value={entryDate}
-            onChange={(event) => setEntryDate(event.target.value)}
+            onChange={(event) => selectDate(event.target.value)}
           />
           <IconButton label="Next day" onClick={() => moveDay(1)}>
             <ChevronRight size={20} />

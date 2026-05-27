@@ -26,6 +26,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
@@ -723,7 +727,8 @@ textarea {
 
 .project-filter-panel {
   display: grid;
-  grid-template-columns: minmax(220px, 0.9fr) minmax(300px, 1.3fr) minmax(180px, auto) auto;
+  width: 100%;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) minmax(150px, 0.72fr) auto;
   grid-template-areas:
     "search search search search"
     "type status schedule summary"
@@ -1775,13 +1780,55 @@ textarea {
 }
 
 .bulk-select-control {
+  display: inline-grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
   justify-self: end;
 }
 
 .bulk-select-control input {
-  width: 17px;
-  height: 17px;
-  accent-color: var(--green);
+  position: relative;
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  appearance: none;
+  place-items: center;
+  margin: 0;
+  border: 1px solid rgba(91, 210, 234, 0.62);
+  background: rgba(3, 10, 14, 0.82);
+  cursor: pointer;
+  clip-path: polygon(5px 0, 100% 0, 100% calc(100% - 5px), calc(100% - 5px) 100%, 0 100%, 0 5px);
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.bulk-select-control input::before {
+  width: 11px;
+  height: 11px;
+  background: var(--green);
+  box-shadow: 0 0 12px rgba(123, 216, 143, 0.58);
+  content: "";
+  transform: scale(0);
+  transition: transform 120ms ease;
+  clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
+}
+
+.bulk-select-control input:checked {
+  border-color: var(--green);
+  background: rgba(18, 45, 34, 0.62);
+}
+
+.bulk-select-control input:checked::before {
+  transform: scale(1);
+}
+
+.bulk-select-control input:focus-visible {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(123, 216, 143, 0.2);
 }
 
 .project-card:active {
