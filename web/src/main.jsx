@@ -44,6 +44,7 @@ const cardTypeLabels = {
 };
 
 const activityFieldLabels = {
+  card_type: "Type",
   status: "Status",
   start_date: "Start date",
   due_date: "Due date",
@@ -328,6 +329,31 @@ function cardEnd(card) {
   return card.due_date || card.start_date || "";
 }
 
+function descendantScheduleBounds(card, cards) {
+  const datedDescendants = collectDescendants(card.id, cards).filter(
+    (descendant) => descendant.start_date || descendant.due_date,
+  );
+  if (!datedDescendants.length) return null;
+
+  const starts = datedDescendants.map(cardStart).filter(Boolean).sort();
+  const ends = datedDescendants.map(cardEnd).filter(Boolean).sort();
+  return { start: starts[0], end: ends[ends.length - 1] };
+}
+
+function ganttScheduleForCard(card, cards) {
+  const descendantBounds = descendantScheduleBounds(card, cards);
+  const resolvedStart = card.start_date || descendantBounds?.start || card.due_date || "";
+  const resolvedEnd = card.due_date || descendantBounds?.end || card.start_date || "";
+  const isReversed = Boolean(resolvedStart && resolvedEnd && resolvedEnd < resolvedStart);
+  return {
+    start: isReversed ? resolvedEnd : resolvedStart,
+    end: isReversed ? resolvedStart : resolvedEnd,
+    isDerived: Boolean(
+      descendantBounds && (!card.start_date || !card.due_date),
+    ),
+  };
+}
+
 function daysBetween(start, end) {
   const startDate = parseLocalDate(start);
   const endDate = parseLocalDate(end);
@@ -554,9 +580,40 @@ function projectIssuesForCards(cards) {
   return cards
     .map((card) => ({
       card,
-      issues: cardDependencyIssues(card, cards),
+      issues: [...cardDependencyIssues(card, cards), ...cardHierarchyDateIssues(card, cards)],
     }))
     .filter((item) => item.issues.length);
+}
+
+function cardHierarchyDateIssues(card, cards) {
+  if (!card.start_date && !card.due_date) return [];
+  const descendantBounds = descendantScheduleBounds(card, cards);
+  if (!descendantBounds) return [];
+
+  const issues = [];
+  if (card.start_date && descendantBounds.start < card.start_date) {
+    issues.push({
+      type: "hierarchy_date_conflict",
+      boundary: "start",
+      severity: "warning",
+      dependency: card,
+      message: `Descendant work begins ${descendantBounds.start} before this card starts ${card.start_date}.`,
+    });
+  }
+  if (card.due_date && descendantBounds.end > card.due_date) {
+    issues.push({
+      type: "hierarchy_date_conflict",
+      boundary: "end",
+      severity: "warning",
+      dependency: card,
+      message: `Descendant work ends ${descendantBounds.end} after this card is due ${card.due_date}.`,
+    });
+  }
+  return issues;
+}
+
+function allCardIssues(card, cards) {
+  return [...cardDependencyIssues(card, cards), ...cardHierarchyDateIssues(card, cards)];
 }
 
 function dependencyDependentsFor(cardId, cards) {
@@ -572,6 +629,22 @@ function cardCanChangeType(card, nextType, cards) {
 
   const parent = cards.find((candidate) => candidate.id === card.parent_id);
   return parent?.card_type === expectedParentType;
+}
+
+function hierarchyShiftForCard(card, nextType, cards) {
+  const storedCard = cards.find((candidate) => candidate.id === card.id);
+  if (!storedCard || storedCard.card_type === nextType) return null;
+
+  const offset = cardTypeOrder[nextType] - cardTypeOrder[storedCard.card_type];
+  const descendants = collectDescendants(card.id, cards);
+  return {
+    descendants,
+    direction: offset > 0 ? "down" : "up",
+    levels: Math.abs(offset),
+    isBlocked: descendants.some(
+      (descendant) => cardTypeOrder[descendant.card_type] + offset > cardTypeOrder.subtask,
+    ),
+  };
 }
 
 function dependencyEdgesForCards(cards) {
@@ -1460,6 +1533,8 @@ function ProjectsApp() {
       return;
     }
 
+    const savedCard = selectedCard.id ? cards.find((card) => card.id === selectedCard.id) : null;
+    const hierarchyChanged = Boolean(savedCard && savedCard.card_type !== selectedCard.card_type);
     const payload = {
       card_type: selectedCard.card_type,
       title: selectedCard.title.trim(),
@@ -1501,6 +1576,9 @@ function ProjectsApp() {
       setKeyboardCardId(saved.id);
       setSelectedCard(null);
       setPreviewCard(saved);
+      if (hierarchyChanged) {
+        await loadCards(activeProjectId);
+      }
       setError("");
     } catch (err) {
       setError(err.message);
@@ -2103,12 +2181,12 @@ const projectEndpoints = [
   {
     method: "GET",
     path: "/api/projmgmt/cards/{card_id}/activity",
-    purpose: "List tracked status, date, parent, and comment changes for one card.",
+    purpose: "List tracked type, status, date, parent, and comment changes for one card.",
   },
   {
     method: "PUT",
     path: "/api/projmgmt/cards/{card_id}",
-    purpose: "Update card details, status, hierarchy, dates, comments, and deliverables.",
+    purpose: "Update a card; type changes shift descendant levels when hierarchy depth remains valid.",
   },
   {
     method: "DELETE",
@@ -2215,6 +2293,8 @@ function ApiReference() {
             <li>Start date must be on or before due date.</li>
             <li>Dependency cards must belong to the same project.</li>
             <li>Dependency date conflicts are warnings and do not block saves.</li>
+            <li>Changing a card type shifts every descendant by the same number of levels.</li>
+            <li>Type changes are rejected when a descendant would move below subtask.</li>
             <li>Cards with children cannot be deleted.</li>
           </ul>
         </section>
@@ -2568,7 +2648,7 @@ function ProjectCardButton({ card, cards, isSelected, onOpenCard, onToggleBulkCa
 }
 
 function IssueMarker({ card, cards, compact = false }) {
-  const issues = cardDependencyIssues(card, cards);
+  const issues = allCardIssues(card, cards);
   if (!issues.length) return null;
   return (
     <span className={compact ? "issue-badge compact" : "issue-badge"}>
@@ -2590,12 +2670,17 @@ function ProjectIssues({ cards, onMoveCard, onOpenCard, onStartNewCard, project 
   const issueGroups = projectIssuesForCards(cards);
   const blockedGroups = groupIssuesByType(issueGroups, "blocked_dependency");
   const dateConflictGroups = groupIssuesByType(issueGroups, "date_conflict");
+  const hierarchyConflictGroups = groupIssuesByType(issueGroups, "hierarchy_date_conflict");
   const blockedCount = issueGroups.reduce(
     (total, group) => total + group.issues.filter((issue) => issue.type === "blocked_dependency").length,
     0,
   );
   const dateConflictCount = issueGroups.reduce(
     (total, group) => total + group.issues.filter((issue) => issue.type === "date_conflict").length,
+    0,
+  );
+  const hierarchyConflictCount = issueGroups.reduce(
+    (total, group) => total + group.issues.filter((issue) => issue.type === "hierarchy_date_conflict").length,
     0,
   );
 
@@ -2609,6 +2694,7 @@ function ProjectIssues({ cards, onMoveCard, onOpenCard, onStartNewCard, project 
         <MetricTile label="Cards With Issues" tone={issueGroups.length ? "danger" : ""} value={issueGroups.length} />
         <MetricTile label="Blocked Dependencies" tone={blockedCount ? "danger" : ""} value={blockedCount} />
         <MetricTile label="Date Conflicts" tone={dateConflictCount ? "danger" : ""} value={dateConflictCount} />
+        <MetricTile label="Hierarchy Conflicts" tone={hierarchyConflictCount ? "danger" : ""} value={hierarchyConflictCount} />
       </div>
 
       <section className="overview-panel issues-panel">
@@ -2631,6 +2717,13 @@ function ProjectIssues({ cards, onMoveCard, onOpenCard, onStartNewCard, project 
               onAction={onOpenCard}
               onOpenCard={onOpenCard}
               title="Date Conflicts"
+            />
+            <IssueGroup
+              actionLabel="Open card"
+              groups={hierarchyConflictGroups}
+              onAction={onOpenCard}
+              onOpenCard={onOpenCard}
+              title="Hierarchy Date Conflicts"
             />
           </div>
         ) : (
@@ -2658,7 +2751,7 @@ function IssueGroup({ actionLabel, groups, onAction, onOpenCard, title }) {
           </button>
           <ul>
             {issues.map((issue) => (
-              <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
+              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>{issue.message}</li>
             ))}
           </ul>
           <div className="issue-actions">
@@ -2720,7 +2813,7 @@ function DependencyGraph({ cards, onOpenCard, onStartNewCard, project }) {
                 <div>
                   {dependency.status === "blocked" ? <span className="issue-badge compact">blocked chain</span> : null}
                   {issues.map((issue) => (
-                    <span className="issue-badge compact" key={`${issue.type}-${issue.dependency.id}`}>{issue.type === "date_conflict" ? "date conflict" : "issue"}</span>
+                    <span className="issue-badge compact" key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>{issue.type === "date_conflict" ? "date conflict" : "issue"}</span>
                   ))}
                 </div>
               </article>
@@ -2967,12 +3060,20 @@ function ProjectGantt({ cards, onOpenCard, onStartNewCard, project }) {
   const [expandedCardIds, setExpandedCardIds] = useState(() => new Set());
   const [showUndatedCards, setShowUndatedCards] = useState(true);
   const rows = getHierarchyRows(cards, expandedCardIds);
-  const visibleRows = showUndatedCards ? rows : rows.filter(({ card }) => card.start_date || card.due_date);
-  const scheduled = getScheduledCards(cards);
+  const ganttSchedules = new Map(cards.map((card) => [card.id, ganttScheduleForCard(card, cards)]));
+  const visibleRows = showUndatedCards ? rows : rows.filter(({ card }) => ganttSchedules.get(card.id).start);
+  const scheduled = cards
+    .map((card) => {
+      const schedule = ganttSchedules.get(card.id);
+      return schedule.start || schedule.end
+        ? { ...card, start_date: schedule.start, due_date: schedule.end }
+        : null;
+    })
+    .filter(Boolean);
   const bounds = getScheduleBounds(scheduled);
   const totalDays = Math.max(daysBetween(bounds.start, bounds.end), 1);
   const ganttRightPadding = 3;
-  const undatedCount = rows.filter(({ card }) => !card.start_date && !card.due_date).length;
+  const undatedCount = rows.filter(({ card }) => !ganttSchedules.get(card.id).start).length;
   const expandableCardIds = cards
     .filter((card) => cards.some((candidate) => candidate.parent_id === card.id))
     .map((card) => card.id);
@@ -3032,8 +3133,8 @@ function ProjectGantt({ cards, onOpenCard, onStartNewCard, project }) {
       {visibleRows.length ? (
         <div className="gantt-chart">
           {visibleRows.map(({ card, childrenCount, isExpanded, level }) => {
-            const start = cardStart(card);
-            const end = cardEnd(card);
+            const schedule = ganttSchedules.get(card.id);
+            const { start, end, isDerived } = schedule;
             const hasSchedule = Boolean(start && end);
             const offset = hasSchedule ? Math.max(daysBetween(bounds.start, start), 0) : 0;
             const duration = hasSchedule ? Math.max(daysBetween(start, end), 0) : 0;
@@ -3058,12 +3159,13 @@ function ProjectGantt({ cards, onOpenCard, onStartNewCard, project }) {
                     <strong>{card.title}</strong>
                     <IssueMarker card={card} cards={cards} compact />
                     {childrenCount ? <span className="gantt-child-count">{childrenCount} child{childrenCount === 1 ? "" : "ren"}</span> : null}
+                    {isDerived ? <span className="gantt-derived-label">Derived dates</span> : null}
                   </button>
                 </div>
                 <div className="gantt-track">
                   {hasSchedule ? (
                     <span
-                      className={`gantt-bar ${card.status}`}
+                      className={`gantt-bar ${card.status}${isDerived ? " derived" : ""}`}
                       style={{ left: `${left}%`, width: `${clampedWidth}%` }}
                     >
                       {start === end ? start : `${start} -> ${end}`}
@@ -3215,7 +3317,7 @@ function ProjectSummaryChips({ summary }) {
 function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard }) {
   const parentCard = cards.find((candidate) => candidate.id === card.parent_id);
   const childCount = cards.filter((candidate) => candidate.parent_id === card.id).length;
-  const issues = cardDependencyIssues(card, cards);
+  const issues = allCardIssues(card, cards);
 
   return (
     <aside className="card-preview-panel" aria-label="Selected card preview">
@@ -3263,7 +3365,7 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard }) {
           <h3>Issues</h3>
           <ul>
             {issues.map((issue) => (
-              <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
+              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>{issue.message}</li>
             ))}
           </ul>
         </section>
@@ -3410,7 +3512,8 @@ function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChan
   const childCards = card.id ? cards.filter((candidate) => candidate.parent_id === card.id) : [];
   const dependencyIds = card.dependency_ids || [];
   const dependencyOptions = cards.filter((candidate) => candidate.id !== card.id);
-  const dependencyIssues = cardDependencyIssues(card, cards);
+  const dependencyIssues = allCardIssues(card, cards);
+  const hierarchyShift = hierarchyShiftForCard(card, card.card_type, cards);
   const parentOptions = cards.filter(
     (candidate) => candidate.id !== card.id && candidate.card_type === expectedParentType,
   );
@@ -3494,7 +3597,7 @@ function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChan
             <span>Type</span>
             <select value={card.card_type} onChange={(event) => updateCardType(event.target.value)}>
               {CARD_TYPES.map((type) => (
-                <option key={type} value={type}>
+                <option key={type} value={type} disabled={hierarchyShiftForCard(card, type, cards)?.isBlocked}>
                   {cardTypeLabels[type]}
                 </option>
               ))}
@@ -3561,6 +3664,17 @@ function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChan
           ) : null}
         </section>
 
+        {hierarchyShift?.descendants.length ? (
+          <section className="hierarchy-shift-panel">
+            <GitBranch size={18} />
+            <p>
+              Saving moves {hierarchyShift.descendants.length} descendant
+              {hierarchyShift.descendants.length === 1 ? "" : "s"} {hierarchyShift.direction}{" "}
+              {hierarchyShift.levels} level{hierarchyShift.levels === 1 ? "" : "s"}.
+            </p>
+          </section>
+        ) : null}
+
         <section className="planner-assignment-panel">
           <header>
             <div>
@@ -3600,7 +3714,7 @@ function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChan
             </header>
             <ul>
               {dependencyIssues.map((issue) => (
-                <li key={`${issue.type}-${issue.dependency.id}`}>{issue.message}</li>
+                <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>{issue.message}</li>
               ))}
             </ul>
           </section>

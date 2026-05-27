@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from app_projmgmt.api import (
     card_has_children,
+    put_card,
     validate_card_dependencies,
     validate_card_dates,
     validate_card_relationships,
@@ -24,7 +25,13 @@ from app_projmgmt.database import (
     list_projects,
     update_card,
 )
-from app_projmgmt.models import CardStatus, CardType, ProjectCardCreate, ProjectCreate
+from app_projmgmt.models import (
+    CardStatus,
+    CardType,
+    ProjectCardCreate,
+    ProjectCardUpdate,
+    ProjectCreate,
+)
 
 
 @pytest.fixture
@@ -212,6 +219,111 @@ def test_validate_card_hierarchy(temp_db):
 
     with pytest.raises(HTTPException):
         validate_card_relationships(project.id, CardType.FEATURE, None)
+
+
+def test_changing_card_type_shifts_descendants_and_records_activity(temp_db):
+    project = create_project(ProjectCreate(name="Hierarchy shift"))
+    new_parent = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Portfolio",
+        )
+    )
+    epic = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Release",
+        )
+    )
+    feature = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.FEATURE,
+            title="Reporting",
+            parent_id=epic.id,
+        )
+    )
+    story = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.STORY,
+            title="Export",
+            parent_id=feature.id,
+        )
+    )
+
+    updated = put_card(
+        epic.id,
+        ProjectCardUpdate(
+            card_type=CardType.FEATURE,
+            title=epic.title,
+            parent_id=new_parent.id,
+        ),
+    )
+
+    assert updated.card_type == CardType.FEATURE
+    assert get_card(feature.id).card_type == CardType.STORY
+    assert get_card(story.id).card_type == CardType.SUBTASK
+    assert {item.field_name for item in list_card_activity(feature.id)} == {"card_type"}
+
+
+def test_changing_card_type_rejects_descendants_below_subtask(temp_db):
+    project = create_project(ProjectCreate(name="Hierarchy limit"))
+    new_parent = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Portfolio",
+        )
+    )
+    epic = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Release",
+        )
+    )
+    feature = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.FEATURE,
+            title="Reporting",
+            parent_id=epic.id,
+        )
+    )
+    story = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.STORY,
+            title="Export",
+            parent_id=feature.id,
+        )
+    )
+    subtask = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.SUBTASK,
+            title="Format CSV",
+            parent_id=story.id,
+        )
+    )
+
+    with pytest.raises(HTTPException, match="outside the epic-to-subtask"):
+        put_card(
+            epic.id,
+            ProjectCardUpdate(
+                card_type=CardType.FEATURE,
+                title=epic.title,
+                parent_id=new_parent.id,
+            ),
+        )
+
+    assert get_card(epic.id).card_type == CardType.EPIC
+    assert get_card(feature.id).card_type == CardType.FEATURE
+    assert get_card(story.id).card_type == CardType.STORY
+    assert get_card(subtask.id).card_type == CardType.SUBTASK
 
 
 def test_validate_card_dates(temp_db):

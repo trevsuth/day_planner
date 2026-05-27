@@ -11,7 +11,7 @@ from app_projmgmt.database import (
     list_card_activity,
     list_cards,
     list_projects,
-    update_card,
+    update_cards,
     update_project,
 )
 from app_projmgmt.models import (
@@ -27,6 +27,12 @@ from app_projmgmt.models import (
 
 
 router = APIRouter(prefix="/api/projmgmt", tags=["project management"])
+CARD_TYPE_HIERARCHY = (
+    CardType.EPIC,
+    CardType.FEATURE,
+    CardType.STORY,
+    CardType.SUBTASK,
+)
 
 
 @router.on_event("startup")
@@ -107,19 +113,14 @@ def put_card(card_id: str, data: ProjectCardUpdate) -> ProjectCard:
     if not existing:
         raise HTTPException(status_code=404, detail="Card not found.")
 
-    if data.card_type != existing.card_type and card_has_children(
-        existing.project_id, card_id
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Cards with child cards cannot change type.",
-        )
-
     validate_card_relationships(
         existing.project_id, data.card_type, data.parent_id, card_id
     )
     validate_card_dependencies(existing.project_id, data.dependency_ids, card_id)
     validate_card_dates(data.start_date, data.due_date)
+    descendants = shifted_descendants(
+        existing.project_id, card_id, existing.card_type, data.card_type
+    )
     existing.card_type = data.card_type
     existing.title = data.title
     existing.description = data.description
@@ -130,7 +131,7 @@ def put_card(card_id: str, data: ProjectCardUpdate) -> ProjectCard:
     existing.parent_id = data.parent_id
     existing.dependency_ids = data.dependency_ids
     existing.deliverables = data.deliverables
-    return update_card(existing)
+    return update_cards([existing, *descendants])[0]
 
 
 def validate_card_dates(start_date, due_date) -> None:
@@ -156,6 +157,43 @@ def remove_card(card_id: str) -> None:
 
 def card_has_children(project_id: str, card_id: str) -> bool:
     return any(card.parent_id == card_id for card in list_cards(project_id))
+
+
+def shifted_descendants(
+    project_id: str,
+    card_id: str,
+    previous_type: CardType,
+    next_type: CardType,
+) -> list[ProjectCard]:
+    offset = CARD_TYPE_HIERARCHY.index(next_type) - CARD_TYPE_HIERARCHY.index(
+        previous_type
+    )
+    if not offset:
+        return []
+
+    cards = list_cards(project_id)
+    descendants: list[ProjectCard] = []
+
+    def collect(parent_id: str) -> None:
+        for candidate in cards:
+            if candidate.parent_id != parent_id:
+                continue
+            descendants.append(candidate)
+            collect(candidate.id)
+
+    collect(card_id)
+    for descendant in descendants:
+        next_index = CARD_TYPE_HIERARCHY.index(descendant.card_type) + offset
+        if next_index < 0 or next_index >= len(CARD_TYPE_HIERARCHY):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Changing this card type would move a descendant outside "
+                    "the epic-to-subtask hierarchy."
+                ),
+            )
+        descendant.card_type = CARD_TYPE_HIERARCHY[next_index]
+    return descendants
 
 
 def validate_card_relationships(

@@ -197,7 +197,14 @@ def record_card_activity(
     before: ProjectCard,
     after: ProjectCard,
 ) -> None:
-    tracked_fields = ("status", "start_date", "due_date", "parent_id", "comments")
+    tracked_fields = (
+        "card_type",
+        "status",
+        "start_date",
+        "due_date",
+        "parent_id",
+        "comments",
+    )
     created_at = now_iso()
     for field_name in tracked_fields:
         old_value = getattr(before, field_name)
@@ -326,39 +333,45 @@ def create_card(data: ProjectCardCreate) -> ProjectCard:
     return card
 
 
-def update_card(card: ProjectCard) -> ProjectCard:
-    card.updated_at = datetime.now(timezone.utc)
+def update_cards(cards: list[ProjectCard]) -> list[ProjectCard]:
+    updated_at = datetime.now(timezone.utc)
     with get_connection() as conn:
-        before_row = conn.execute(
-            "SELECT * FROM project_cards WHERE id = ?", (card.id,)
-        ).fetchone()
-        before = card_from_row(before_row) if before_row else None
-        conn.execute(
-            """
-            UPDATE project_cards
-            SET card_type = ?, title = ?, description = ?, comments = ?,
-                status = ?, start_date = ?, due_date = ?, parent_id = ?,
-                dependency_ids = ?, deliverables = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                card.card_type,
-                card.title,
-                card.description,
-                card.comments,
-                card.status,
-                card.start_date.isoformat() if card.start_date else None,
-                card.due_date.isoformat() if card.due_date else None,
-                card.parent_id,
-                json.dumps(card.dependency_ids),
-                json.dumps(card.deliverables),
-                card.updated_at.isoformat(),
-                card.id,
-            ),
-        )
-        if before:
-            record_card_activity(conn, before, card)
-    return card
+        for card in cards:
+            card.updated_at = updated_at
+            before_row = conn.execute(
+                "SELECT * FROM project_cards WHERE id = ?", (card.id,)
+            ).fetchone()
+            before = card_from_row(before_row) if before_row else None
+            conn.execute(
+                """
+                UPDATE project_cards
+                SET card_type = ?, title = ?, description = ?, comments = ?,
+                    status = ?, start_date = ?, due_date = ?, parent_id = ?,
+                    dependency_ids = ?, deliverables = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    card.card_type,
+                    card.title,
+                    card.description,
+                    card.comments,
+                    card.status,
+                    card.start_date.isoformat() if card.start_date else None,
+                    card.due_date.isoformat() if card.due_date else None,
+                    card.parent_id,
+                    json.dumps(card.dependency_ids),
+                    json.dumps(card.deliverables),
+                    card.updated_at.isoformat(),
+                    card.id,
+                ),
+            )
+            if before:
+                record_card_activity(conn, before, card)
+    return cards
+
+
+def update_card(card: ProjectCard) -> ProjectCard:
+    return update_cards([card])[0]
 
 
 def delete_card(card_id: str) -> None:
