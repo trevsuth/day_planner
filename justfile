@@ -12,6 +12,14 @@ test:
 web-test:
     npm --prefix web run test:e2e
 
+# Export planner and project data to a portable JSON backup
+backup file="daily-planner-backup.json":
+    uv run python -m app_planner.backup export "{{file}}"
+
+# Restore planner and project data from a portable JSON backup, replacing local data
+restore file="daily-planner-backup.json":
+    uv run python -m app_planner.backup restore "{{file}}"
+
 # Run the API server for the React frontend
 api:
     uv run uvicorn app_planner.api:app --reload
@@ -63,6 +71,16 @@ host-logs:
 # Show hosted container status
 host-ps:
     {{container_compose}} ps
+
+# Export hosted data to a portable JSON backup on this machine
+host-backup file="daily-planner-backup.json":
+    {{container_compose}} exec -T daily-planner python -m app_planner.backup export /tmp/daily-planner-backup.json
+    {{container_compose}} cp daily-planner:/tmp/daily-planner-backup.json "{{file}}"
+
+# Restore hosted data from a portable JSON backup, replacing hosted data
+host-restore file="daily-planner-backup.json":
+    {{container_compose}} cp "{{file}}" daily-planner:/tmp/daily-planner-backup.json
+    {{container_compose}} exec -T daily-planner python -m app_planner.backup restore /tmp/daily-planner-backup.json
 
 # Build and run the hosted app with Docker Compose
 docker-up:

@@ -227,8 +227,20 @@ class PlannerApp(App):
 
     def save_current_entry(self):
         # Collect updated values from widgets
-        priorities = [
-            input.value for input in self.priority_inputs if input.value.strip()
+        priority_rows = [
+            (
+                input.value,
+                (
+                    self.entry.priority_card_ids[index]
+                    if self.entry
+                    and index < len(self.entry.priorities)
+                    and index < len(self.entry.priority_card_ids)
+                    and input.value == self.entry.priorities[index]
+                    else None
+                ),
+            )
+            for index, input in enumerate(self.priority_inputs)
+            if input.value.strip()
         ]
         tasks = [
             Task(text=inp.value, completed=cb.value)
@@ -238,7 +250,8 @@ class PlannerApp(App):
 
         updated_entry = PlannerEntry(
             entry_date=self.entry_date,
-            priorities=priorities,
+            priorities=[priority for priority, _ in priority_rows],
+            priority_card_ids=[card_id for _, card_id in priority_rows],
             tasks=tasks,
             schedule=self.schedule_area.text,
             notes=self.notes_area.text,

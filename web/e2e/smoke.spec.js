@@ -94,6 +94,8 @@ test("edits Gantt dates and surfaces derived schedule conflicts", async ({
       "Shown on chart as 2030-06-05 to 2030-06-12 using descendant dates.",
     ),
   ).toBeVisible();
+  await expect(summary.getByRole("button", { name: "Start from Delivery feature" })).toBeVisible();
+  await expect(summary.getByRole("button", { name: "End from Delivery feature" })).toBeVisible();
 
   await summary.getByLabel("Start Date").fill("2030-06-08");
   await summary.getByLabel("End Date").fill("2030-06-10");
@@ -108,13 +110,19 @@ test("edits Gantt dates and surfaces derived schedule conflicts", async ({
   await expect(page.getByText("Hierarchy Date Conflicts")).toBeVisible();
   await expect(
     page.getByText(
-      "Descendant work begins 2030-06-05 before this card starts 2030-06-08.",
+      '"Delivery feature" begins 2030-06-05 before this card starts 2030-06-08.',
     ),
   ).toBeVisible();
   await expect(
     page.getByText(
-      "Descendant work ends 2030-06-12 after this card is due 2030-06-10.",
+      '"Delivery feature" ends 2030-06-12 after this card is due 2030-06-10.',
     ),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: /Delivery feature.*begins 2030-06-05/ })
+    .click();
+  await expect(
+    page.getByRole("complementary", { name: "Selected card preview" }).getByRole("heading", { name: "Delivery feature" }),
   ).toBeVisible();
 });
 
@@ -125,7 +133,7 @@ test("assigns a project card to a future planner priority", async ({
   await page.goto("/");
   await openProjects(page);
   const project = await createProject(page, "Planner assignment project");
-  await createCard(request, {
+  const card = await createCard(request, {
     project_id: project.id,
     card_type: "epic",
     title: "Future review",
@@ -163,4 +171,28 @@ test("assigns a project card to a future planner priority", async ({
   await expect(page.locator(".priority-row input").first()).toHaveValue(
     /Future review/,
   );
+  await expect(page.getByRole("button", { name: "Card", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Card", exact: true }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Selected card preview" }).getByRole("heading", { name: "Future review" }),
+  ).toBeVisible();
+
+  const rescheduled = await request.put(`/api/planner/card-assignments/${card.id}`, {
+    data: {
+      entry_date: "2031-01-16",
+      priority_text: "Planner assignment project - Epic: Future review",
+    },
+  });
+  expect(rescheduled.ok()).toBeTruthy();
+  const formerDay = await (await request.get("/api/planner/entries/2031-01-15")).json();
+  expect(formerDay.priority_card_ids).toEqual([]);
+
+  await page
+    .getByRole("navigation", { name: "Application views" })
+    .getByRole("button", { name: "Planner" })
+    .click();
+  await page.getByLabel("Planner date").fill("2031-01-16");
+  await expect(page.getByRole("button", { name: "Card", exact: true })).toBeVisible();
+  await page.getByLabel("Remove card assignment").click();
+  await expect(page.locator(".priority-row input").first()).toHaveValue("");
 });

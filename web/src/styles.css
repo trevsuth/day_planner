@@ -579,7 +579,7 @@ textarea {
   clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
 }
 
-.priority-row span {
+.priority-row .priority-index {
   display: inline-grid;
   width: 30px;
   height: 30px;
@@ -597,6 +597,32 @@ textarea {
   min-width: 0;
   min-height: 42px;
   padding: 0 11px;
+}
+
+.priority-link-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.priority-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(91, 210, 234, 0.4);
+  background: rgba(91, 210, 234, 0.1);
+  color: var(--line-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+.priority-link-button:not(:disabled):hover {
+  border-color: var(--line-strong);
+  background: rgba(91, 210, 234, 0.18);
 }
 
 .task-row input[type="checkbox"] {
@@ -1243,6 +1269,24 @@ textarea {
   background: transparent;
   color: var(--text);
   text-align: left;
+}
+
+.issue-row li button,
+.preview-issues li button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(91, 210, 234, 0.38);
+  text-underline-offset: 3px;
+}
+
+.issue-row li button:hover,
+.preview-issues li button:hover {
+  color: var(--line-strong);
+  text-decoration-color: var(--line-strong);
 }
 
 .issue-row ul {
@@ -2089,6 +2133,25 @@ textarea {
 
 .preview-schedule-editor header span {
   color: var(--green);
+}
+
+.preview-derived-bounds {
+  display: grid;
+  gap: 7px;
+  padding: 8px;
+  border-left: 2px solid rgba(91, 210, 234, 0.5);
+  background: rgba(91, 210, 234, 0.06);
+}
+
+.preview-derived-bounds button {
+  width: fit-content;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--line-strong);
+  font-size: 0.78rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .preview-schedule-editor > div {

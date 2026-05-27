@@ -9,6 +9,7 @@ node_modules/
 web/dist/
 web/playwright-report/
 web/test-results/
+daily-planner-backup.json
 
 # Virtual environments
 .venv

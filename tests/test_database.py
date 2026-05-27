@@ -6,7 +6,13 @@ import tempfile
 
 import pytest
 
-from app_planner.database import init_db, save_entry, load_entry
+from app_planner.database import (
+    assign_card_priority,
+    init_db,
+    load_entry,
+    save_entry,
+    unlink_card_priority,
+)
 from app_planner.models import PlannerEntry, Task
 
 
@@ -28,6 +34,7 @@ def test_save_and_load_entry(temp_db):
     entry = PlannerEntry(
         entry_date=date(2025, 4, 10),
         priorities=["Finish report", "Workout", "Meditate"],
+        priority_card_ids=["card-1", None, None],
         tasks=[
             Task(text="Write unit test", completed=True),
             Task(text="Push to Git", completed=False),
@@ -42,6 +49,7 @@ def test_save_and_load_entry(temp_db):
     assert loaded is not None
     assert loaded.entry_date == entry.entry_date
     assert loaded.priorities == entry.priorities
+    assert loaded.priority_card_ids == entry.priority_card_ids
     assert loaded.tasks == entry.tasks
     assert loaded.schedule == entry.schedule
     assert loaded.notes == entry.notes
@@ -79,9 +87,61 @@ def test_init_db_records_planner_migration_for_existing_database(monkeypatch):
             "SELECT version, name FROM schema_migrations ORDER BY version"
         ).fetchall()
         row = conn.execute(
-            "SELECT notes FROM planner WHERE entry_date = '2026-05-18'"
+            "SELECT notes, priority_card_ids FROM planner WHERE entry_date = '2026-05-18'"
         ).fetchone()
 
-    assert migrations == [(1, "create_planner")]
-    assert row == ("Existing row",)
+    assert migrations == [
+        (1, "create_planner"),
+        (2, "add_priority_card_links"),
+    ]
+    assert row == ("Existing row", "[]")
     os.remove(path)
+
+
+def test_assigning_card_priority_moves_and_unlinks_card(temp_db):
+    save_entry(
+        PlannerEntry(
+            entry_date=date(2026, 6, 1),
+            priorities=["Card work"],
+            priority_card_ids=["card-1"],
+        )
+    )
+
+    moved = assign_card_priority("2026-06-02", "card-1", "Moved card work")
+
+    first_day = load_entry("2026-06-01")
+    assert first_day is not None
+    assert first_day.priorities == []
+    assert first_day.priority_card_ids == []
+    assert moved.priorities == ["Moved card work"]
+    assert moved.priority_card_ids == ["card-1"]
+
+    unlink_card_priority("card-1")
+    second_day = load_entry("2026-06-02")
+    assert second_day is not None
+    assert second_day.priorities == []
+    assert second_day.priority_card_ids == []
+
+
+def test_assigning_card_to_full_day_keeps_existing_link(temp_db):
+    save_entry(
+        PlannerEntry(
+            entry_date=date(2026, 6, 1),
+            priorities=["Card work"],
+            priority_card_ids=["card-1"],
+        )
+    )
+    save_entry(
+        PlannerEntry(
+            entry_date=date(2026, 6, 2),
+            priorities=["One", "Two", "Three"],
+            priority_card_ids=[None, None, None],
+        )
+    )
+
+    with pytest.raises(ValueError, match="no open priority slots"):
+        assign_card_priority("2026-06-02", "card-1", "Moved card work")
+
+    original = load_entry("2026-06-01")
+    assert original is not None
+    assert original.priority_card_ids == ["card-1"]

@@ -178,6 +178,34 @@ just web-test
 
 The browser tests build the frontend, start an isolated local API server, and use temporary planner and project databases rather than your local application data.
 
+## Backup And Restore
+
+Export all planner entries, linked priority assignments, projects, cards, and card activity to a portable JSON file:
+
+```bash
+just backup
+```
+
+Restore replaces the current local planner and project data with the contents of that file:
+
+```bash
+just restore
+```
+
+Provide a filename when needed:
+
+```bash
+just backup backups/workstation.json
+just restore backups/workstation.json
+```
+
+For a running hosted container, use the matching host recipes. `CONTAINER_COMPOSE='podman compose'` switches the same recipes to Podman:
+
+```bash
+just host-backup backups/hosted.json
+just host-restore backups/hosted.json
+```
+
 ## API
 
 The web frontend talks to the FastAPI app through these endpoints:
@@ -186,6 +214,8 @@ The web frontend talks to the FastAPI app through these endpoints:
 | --- | --- | --- |
 | `GET` | `/api/planner/entries/{entry_date}` | Load a planner entry by `YYYY-MM-DD` date |
 | `PUT` | `/api/planner/entries/{entry_date}` | Save a planner entry for that date |
+| `PUT` | `/api/planner/card-assignments/{card_id}` | Assign or move a card into a dated planner priority slot |
+| `DELETE` | `/api/planner/card-assignments/{card_id}` | Remove a linked card assignment from the planner |
 | `GET` | `/api/projmgmt/projects` | List projects |
 | `POST` | `/api/projmgmt/projects` | Create a project |
 | `DELETE` | `/api/projmgmt/projects/{project_id}` | Delete a project and its cards |
@@ -207,6 +237,8 @@ Project
 ```
 
 In the Projects tab, opening a project card shows linked epics and an inline field for adding epics without leaving the project card. Opening an epic, feature, or story card shows its parent, child cards, valid parent choices, and an inline field for adding the next child type. Type a child card name and press `Enter` or click `Add`; the child is added to the list and the parent card stays open so multiple child cards can be created quickly. The API enforces the same hierarchy, so a story must be tied to a feature and a subtask must be tied to a story.
+
+Assigning a project card to a planner date creates a linked priority entry. Assigning the same card again moves that priority assignment to the new date. In the web planner, the small linked-card control opens its project card and the adjacent unlink control removes the assignment.
 
 ## Controls
 
@@ -309,6 +341,8 @@ Available `just` recipes:
 | `just` | List all available recipes |
 | `just test` | Run the Python test suite |
 | `just web-test` | Run focused Playwright browser smoke tests using isolated databases |
+| `just backup [file]` | Export local planner and project data to portable JSON |
+| `just restore [file]` | Replace local data from a portable JSON backup |
 | `just dev` | Run the API and React development servers together |
 | `just host-up` | Build and run the hosted container app using `CONTAINER_COMPOSE`, defaulting to Docker Compose |
 | `just host-down` | Stop the hosted container app |
@@ -316,6 +350,8 @@ Available `just` recipes:
 | `just host-build` | Build the hosted container image |
 | `just host-logs` | Follow hosted container logs |
 | `just host-ps` | Show hosted container status |
+| `just host-backup [file]` | Export data from the running hosted container |
+| `just host-restore [file]` | Replace data in the running hosted container from backup |
 | `just docker-up` | Build and run the Docker Compose hosted app |
 | `just docker-down` | Stop the Docker Compose hosted app |
 | `just docker-reset` | Stop Docker Compose and remove its local database volume |

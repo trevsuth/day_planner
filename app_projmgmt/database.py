@@ -409,3 +409,73 @@ def list_card_activity(card_id: str) -> list[ProjectCardActivity]:
             (card_id,),
         ).fetchall()
     return [activity_from_row(row) for row in rows]
+
+
+def list_all_cards() -> list[ProjectCard]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM project_cards ORDER BY created_at ASC"
+        ).fetchall()
+    return [card_from_row(row) for row in rows]
+
+
+def list_all_card_activity() -> list[ProjectCardActivity]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM project_card_activity ORDER BY created_at ASC"
+        ).fetchall()
+    return [activity_from_row(row) for row in rows]
+
+
+def replace_project_data(
+    projects: list[Project],
+    cards: list[ProjectCard],
+    activity: list[ProjectCardActivity],
+) -> None:
+    with get_connection() as conn:
+        conn.execute("PRAGMA defer_foreign_keys = ON")
+        conn.execute("DELETE FROM projects")
+        for project in projects:
+            conn.execute(
+                """
+                INSERT INTO projects (id, name, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    project.id,
+                    project.name,
+                    project.description,
+                    project.created_at.isoformat(),
+                    project.updated_at.isoformat(),
+                ),
+            )
+        for card in cards:
+            conn.execute(
+                """
+                INSERT INTO project_cards (
+                    id, project_id, card_type, title, description, comments, status,
+                    start_date, due_date, parent_id, dependency_ids, deliverables,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                serialize_card(card),
+            )
+        for item in activity:
+            conn.execute(
+                """
+                INSERT INTO project_card_activity (
+                    id, project_id, card_id, field_name, old_value, new_value, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item.id,
+                    item.project_id,
+                    item.card_id,
+                    item.field_name,
+                    item.old_value,
+                    item.new_value,
+                    item.created_at.isoformat(),
+                ),
+            )

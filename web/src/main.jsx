@@ -13,6 +13,7 @@ import {
   FileText,
   GitBranch,
   FolderKanban,
+  Link2,
   ListChecks,
   Map as MapIcon,
   NotebookPen,
@@ -20,6 +21,7 @@ import {
   Save,
   Star,
   Trash2,
+  Unlink,
   Upload,
 } from "lucide-react";
 import "./styles.css";
@@ -138,14 +140,17 @@ function displayDate(value) {
 
 function normalizeEntry(entry, entryDate) {
   const priorities = [...(entry.priorities ?? [])];
+  const priorityCardIds = [...(entry.priority_card_ids ?? [])];
   const tasks = [...(entry.tasks ?? [])];
 
   while (priorities.length < PRIORITY_COUNT) priorities.push("");
+  while (priorityCardIds.length < PRIORITY_COUNT) priorityCardIds.push(null);
   while (tasks.length < TASK_COUNT) tasks.push({ text: "", completed: false });
 
   return {
     entry_date: entry.entry_date ?? entryDate,
     priorities: priorities.slice(0, PRIORITY_COUNT),
+    priority_card_ids: priorityCardIds.slice(0, PRIORITY_COUNT),
     tasks: tasks.slice(0, TASK_COUNT),
     schedule: entry.schedule ?? "",
     notes: entry.notes ?? "",
@@ -153,9 +158,16 @@ function normalizeEntry(entry, entryDate) {
 }
 
 function compactEntry(entry) {
+  const nonEmptyPriorities = entry.priorities
+    .map((item, index) => ({
+      cardId: entry.priority_card_ids[index] || null,
+      text: item.trim(),
+    }))
+    .filter((item) => item.text);
   return {
     entry_date: entry.entry_date,
-    priorities: entry.priorities.map((item) => item.trim()).filter(Boolean),
+    priorities: nonEmptyPriorities.map((item) => item.text),
+    priority_card_ids: nonEmptyPriorities.map((item) => item.cardId),
     tasks: entry.tasks
       .map((task) => ({ text: task.text.trim(), completed: task.completed }))
       .filter((task) => task.text),
@@ -335,9 +347,18 @@ function descendantScheduleBounds(card, cards) {
   );
   if (!datedDescendants.length) return null;
 
-  const starts = datedDescendants.map(cardStart).filter(Boolean).sort();
-  const ends = datedDescendants.map(cardEnd).filter(Boolean).sort();
-  return { start: starts[0], end: ends[ends.length - 1] };
+  const starts = datedDescendants
+    .filter((descendant) => cardStart(descendant))
+    .sort((first, second) => cardStart(first).localeCompare(cardStart(second)) || first.title.localeCompare(second.title));
+  const ends = datedDescendants
+    .filter((descendant) => cardEnd(descendant))
+    .sort((first, second) => cardEnd(first).localeCompare(cardEnd(second)) || first.title.localeCompare(second.title));
+  return {
+    start: cardStart(starts[0]),
+    end: cardEnd(ends[ends.length - 1]),
+    startCard: starts[0],
+    endCard: ends[ends.length - 1],
+  };
 }
 
 function ganttScheduleForCard(card, cards) {
@@ -348,6 +369,8 @@ function ganttScheduleForCard(card, cards) {
   return {
     start: isReversed ? resolvedEnd : resolvedStart,
     end: isReversed ? resolvedStart : resolvedEnd,
+    startCard: descendantBounds?.startCard,
+    endCard: descendantBounds?.endCard,
     isDerived: Boolean(
       descendantBounds && (!card.start_date || !card.due_date),
     ),
@@ -596,8 +619,8 @@ function cardHierarchyDateIssues(card, cards) {
       type: "hierarchy_date_conflict",
       boundary: "start",
       severity: "warning",
-      dependency: card,
-      message: `Descendant work begins ${descendantBounds.start} before this card starts ${card.start_date}.`,
+      dependency: descendantBounds.startCard,
+      message: `"${descendantBounds.startCard.title}" begins ${descendantBounds.start} before this card starts ${card.start_date}.`,
     });
   }
   if (card.due_date && descendantBounds.end > card.due_date) {
@@ -605,8 +628,8 @@ function cardHierarchyDateIssues(card, cards) {
       type: "hierarchy_date_conflict",
       boundary: "end",
       severity: "warning",
-      dependency: card,
-      message: `Descendant work ends ${descendantBounds.end} after this card is due ${card.due_date}.`,
+      dependency: descendantBounds.endCard,
+      message: `"${descendantBounds.endCard.title}" ends ${descendantBounds.end} after this card is due ${card.due_date}.`,
     });
   }
   return issues;
@@ -723,6 +746,7 @@ function Section({ icon, title, children, className = "" }) {
 
 function App() {
   const [activeTab, setActiveTab] = useState("planner");
+  const [requestedCardId, setRequestedCardId] = useState("");
 
   return (
     <main className="app-shell">
@@ -753,20 +777,33 @@ function App() {
         </button>
       </nav>
 
-      {activeTab === "planner" ? <PlannerApp /> : null}
-      {activeTab === "projects" ? <ProjectsApp /> : null}
+      {activeTab === "planner" ? (
+        <PlannerApp
+          onOpenLinkedCard={(cardId) => {
+            setRequestedCardId(cardId);
+            setActiveTab("projects");
+          }}
+        />
+      ) : null}
+      {activeTab === "projects" ? (
+        <ProjectsApp
+          requestedCardId={requestedCardId}
+          onRequestedCardOpened={() => setRequestedCardId("")}
+        />
+      ) : null}
       {activeTab === "api" ? <ApiReference /> : null}
     </main>
   );
 }
 
-function PlannerApp() {
+function PlannerApp({ onOpenLinkedCard }) {
   const today = useMemo(() => formatDateInput(new Date()), []);
   const [entryDate, setEntryDate] = useState(today);
   const [entry, setEntry] = useState(() => normalizeEntry({}, today));
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [isDirty, setIsDirty] = useState(false);
+  const [linkedCards, setLinkedCards] = useState({});
   const entryRef = useRef(entry);
   const entryDateRef = useRef(entryDate);
   const changeVersionRef = useRef(0);
@@ -809,6 +846,30 @@ function PlannerApp() {
       cancelled = true;
     };
   }, [entryDate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cardIds = [...new Set(entry.priority_card_ids.filter(Boolean))];
+    if (!cardIds.length) {
+      setLinkedCards({});
+      return undefined;
+    }
+
+    async function loadLinkedCards() {
+      const linkedEntries = await Promise.all(
+        cardIds.map(async (cardId) => {
+          const response = await fetch(`/api/projmgmt/cards/${cardId}`);
+          return [cardId, response.ok ? await response.json() : null];
+        }),
+      );
+      if (!cancelled) setLinkedCards(Object.fromEntries(linkedEntries));
+    }
+
+    loadLinkedCards();
+    return () => {
+      cancelled = true;
+    };
+  }, [entry.priority_card_ids.join("|")]);
 
   useEffect(() => {
     if (!isDirty || status === "loading" || status === "saving" || status === "error") return undefined;
@@ -899,6 +960,32 @@ function PlannerApp() {
     setEntryDate(nextDate);
   }
 
+  async function removeCardAssignment(cardId) {
+    const response = await fetch(`/api/planner/card-assignments/${cardId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      setError("Could not remove card assignment.");
+      return;
+    }
+    const nextEntry = normalizeEntry(
+      {
+        ...entryRef.current,
+        priorities: entryRef.current.priorities.filter(
+          (_, index) => entryRef.current.priority_card_ids[index] !== cardId,
+        ),
+        priority_card_ids: entryRef.current.priority_card_ids.filter(
+          (linkedCardId) => linkedCardId !== cardId,
+        ),
+      },
+      entryDate,
+    );
+    entryRef.current = nextEntry;
+    setEntry(nextEntry);
+    setIsDirty(false);
+    setStatus("saved");
+  }
+
   const statusLabel =
     status === "loading"
       ? "Loading"
@@ -961,22 +1048,44 @@ function PlannerApp() {
 
         <Section icon={<Star size={20} />} title="Priorities">
           <div className="priority-list">
-            {entry.priorities.map((priority, index) => (
-              <label className="priority-row" key={index}>
-                <span>{index + 1}</span>
+            {entry.priorities.map((priority, index) => {
+              const linkedCardId = entry.priority_card_ids[index];
+              const linkedCard = linkedCardId ? linkedCards[linkedCardId] : null;
+              return (
+              <div className="priority-row" key={index}>
+                <span className="priority-index">{index + 1}</span>
                 <input
                   value={priority}
                   onChange={(event) =>
                     updateEntry((current) => {
                       const priorities = [...current.priorities];
+                      const priorityCardIds = [...current.priority_card_ids];
                       priorities[index] = event.target.value;
-                      return { ...current, priorities };
+                      priorityCardIds[index] = null;
+                      return { ...current, priorities, priority_card_ids: priorityCardIds };
                     })
                   }
                   placeholder="Priority"
                 />
-              </label>
-            ))}
+                {linkedCardId ? (
+                  <div className="priority-link-actions">
+                    <button
+                      className="priority-link-button"
+                      type="button"
+                      disabled={!linkedCard}
+                      onClick={() => onOpenLinkedCard(linkedCardId)}
+                      title={linkedCard ? `Open ${linkedCard.title}` : "Linked card is unavailable"}
+                    >
+                      <Link2 size={15} />
+                      <span>{linkedCard ? "Card" : "Missing"}</span>
+                    </button>
+                    <IconButton label="Remove card assignment" onClick={() => removeCardAssignment(linkedCardId)}>
+                      <Unlink size={16} />
+                    </IconButton>
+                  </div>
+                ) : null}
+              </div>
+            )})}
           </div>
         </Section>
 
@@ -1028,7 +1137,7 @@ function PlannerApp() {
   );
 }
 
-function ProjectsApp() {
+function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
   const storedProjectState = useMemo(loadStoredProjectState, []);
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState(storedProjectState.activeProjectId || "");
@@ -1090,6 +1199,22 @@ function ProjectsApp() {
   }, []);
 
   useEffect(() => {
+    if (!requestedCardId) return;
+    async function openRequestedCard() {
+      try {
+        const card = await request(`/api/projmgmt/cards/${requestedCardId}`);
+        setActiveProjectId(card.project_id);
+        setPreviewCard(card);
+      } catch (err) {
+        setError("Linked project card is no longer available.");
+      } finally {
+        onRequestedCardOpened();
+      }
+    }
+    openRequestedCard();
+  }, [requestedCardId]);
+
+  useEffect(() => {
     if (activeProjectId) {
       loadCards(activeProjectId);
     } else {
@@ -1120,8 +1245,12 @@ function ProjectsApp() {
   useEffect(() => {
     if (!previewCardId) return;
     const updatedCard = cards.find((card) => card.id === previewCardId);
-    setPreviewCard(updatedCard || null);
-  }, [cards, previewCardId]);
+    if (updatedCard) {
+      setPreviewCard(updatedCard);
+    } else if (cards.length && previewCard?.project_id === activeProjectId) {
+      setPreviewCard(null);
+    }
+  }, [activeProjectId, cards, previewCard, previewCardId]);
 
   useEffect(() => {
     setSelectedBulkCardIds((current) => current.filter((cardId) => cards.some((card) => card.id === cardId)));
@@ -1668,28 +1797,16 @@ function ProjectsApp() {
     }
 
     try {
-      const entry = await request(`/api/planner/entries/${plannerDate}`);
-      const normalized = normalizeEntry(entry, plannerDate);
       const priority = plannerPriorityText(card, activeProject);
-      const existingIndex = normalized.priorities.findIndex((item) => item.trim() === priority);
-
-      if (existingIndex >= 0) {
-        return { ok: true, message: `Already assigned to priority ${existingIndex + 1}.` };
-      }
-
-      const openIndex = normalized.priorities.findIndex((item) => !item.trim());
-      if (openIndex < 0) {
-        return { ok: false, message: `${plannerDate} has no open priority slots.` };
-      }
-
-      const priorities = [...normalized.priorities];
-      priorities[openIndex] = priority;
-      await request(`/api/planner/entries/${plannerDate}`, {
+      const updatedEntry = await request(`/api/planner/card-assignments/${card.id}`, {
         method: "PUT",
-        body: JSON.stringify(compactEntry({ ...normalized, priorities })),
+        body: JSON.stringify({
+          entry_date: plannerDate,
+          priority_text: priority,
+        }),
       });
-
-      return { ok: true, message: `Assigned to ${plannerDate} priority ${openIndex + 1}.` };
+      const assignedIndex = updatedEntry.priority_card_ids.findIndex((cardId) => cardId === card.id);
+      return { ok: true, message: `Assigned to ${plannerDate} priority ${assignedIndex + 1}.` };
     } catch (err) {
       return { ok: false, message: err.message || "Could not assign card to planner." };
     }
@@ -2094,6 +2211,7 @@ function ProjectsApp() {
           onClose={() => setPreviewCard(null)}
           onEdit={(card) => setSelectedCard(card)}
           onMoveCard={moveCardToStatus}
+          onOpenCard={setPreviewCard}
           onSaveDates={projectView === "gantt" ? savePreviewDates : null}
         />
       ) : null}
@@ -2151,6 +2269,16 @@ const plannerEndpoints = [
     method: "PUT",
     path: "/api/planner/entries/{entry_date}",
     purpose: "Create or replace one planner entry. URL date must match body entry_date.",
+  },
+  {
+    method: "PUT",
+    path: "/api/planner/card-assignments/{card_id}",
+    purpose: "Assign or move a linked card into a planner priority slot.",
+  },
+  {
+    method: "DELETE",
+    path: "/api/planner/card-assignments/{card_id}",
+    purpose: "Remove a linked card from its planner priority slot.",
   },
   {
     method: "GET",
@@ -2266,6 +2394,7 @@ function ApiReference() {
             value={`{
   "entry_date": "2026-05-17",
   "priorities": ["Ship project views"],
+  "priority_card_ids": ["linked-card-id"],
   "tasks": [
     { "text": "Review API reference", "completed": false }
   ],
@@ -2778,7 +2907,11 @@ function IssueGroup({ actionLabel, groups, onAction, onOpenCard, title }) {
           </button>
           <ul>
             {issues.map((issue) => (
-              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>{issue.message}</li>
+              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>
+                <button type="button" onClick={() => onOpenCard(issue.dependency)}>
+                  {issue.message}
+                </button>
+              </li>
             ))}
           </ul>
           <div className="issue-actions">
@@ -3341,7 +3474,7 @@ function ProjectSummaryChips({ summary }) {
   );
 }
 
-function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onSaveDates }) {
+function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onOpenCard, onSaveDates }) {
   const [dateDraft, setDateDraft] = useState({
     start_date: card.start_date || "",
     due_date: card.due_date || "",
@@ -3359,8 +3492,11 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onSaveDate
       start_date: card.start_date || "",
       due_date: card.due_date || "",
     });
+  }, [card.start_date, card.due_date]);
+
+  useEffect(() => {
     setDateSaveState("");
-  }, [card.id, card.start_date, card.due_date]);
+  }, [card.id]);
 
   async function saveDates() {
     if (datesInvalid) return;
@@ -3418,7 +3554,19 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onSaveDate
             {dateSaveState && !datesChanged ? <span>{dateSaveState}</span> : null}
           </header>
           {ganttSchedule?.isDerived ? (
-            <p>Shown on chart as {ganttSchedule.start} to {ganttSchedule.end} using descendant dates.</p>
+            <div className="preview-derived-bounds">
+              <p>Shown on chart as {ganttSchedule.start} to {ganttSchedule.end} using descendant dates.</p>
+              {!card.start_date ? (
+                <button type="button" onClick={() => onOpenCard(ganttSchedule.startCard)}>
+                  Start from {ganttSchedule.startCard.title}
+                </button>
+              ) : null}
+              {!card.due_date ? (
+                <button type="button" onClick={() => onOpenCard(ganttSchedule.endCard)}>
+                  End from {ganttSchedule.endCard.title}
+                </button>
+              ) : null}
+            </div>
           ) : null}
           <div>
             <label>
@@ -3465,7 +3613,11 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onSaveDate
           <h3>Issues</h3>
           <ul>
             {issues.map((issue) => (
-              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>{issue.message}</li>
+              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>
+                <button type="button" onClick={() => onOpenCard(issue.dependency)}>
+                  {issue.message}
+                </button>
+              </li>
             ))}
           </ul>
         </section>
