@@ -6,9 +6,11 @@ from datetime import date
 import pytest
 from fastapi import HTTPException
 
-from app_projmgmt.api import (
+from app_projmgmt.api import put_card
+from app_projmgmt.services import (
+    ProjectServiceError,
     card_has_children,
-    put_card,
+    list_project_issues,
     validate_card_dependencies,
     validate_card_dates,
     validate_card_relationships,
@@ -214,10 +216,10 @@ def test_validate_card_hierarchy(temp_db):
     assert card_has_children(project.id, epic.id)
     assert not card_has_children(project.id, feature.id)
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(ProjectServiceError):
         validate_card_relationships(project.id, CardType.STORY, epic.id)
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(ProjectServiceError):
         validate_card_relationships(project.id, CardType.FEATURE, None)
 
 
@@ -331,7 +333,7 @@ def test_validate_card_dates(temp_db):
     validate_card_dates(None, date(2026, 5, 2))
     validate_card_dates(date(2026, 5, 1), None)
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(ProjectServiceError):
         validate_card_dates(date(2026, 5, 3), date(2026, 5, 2))
 
 
@@ -363,14 +365,54 @@ def test_validate_card_dependencies(temp_db):
 
     validate_card_dependencies(project.id, [dependency.id], card.id)
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(ProjectServiceError):
         validate_card_dependencies(project.id, [dependency.id, dependency.id], card.id)
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(ProjectServiceError):
         validate_card_dependencies(project.id, [card.id], card.id)
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(ProjectServiceError):
         validate_card_dependencies(project.id, [other_card.id], card.id)
+
+
+def test_project_issues_are_computed_by_service_rules(temp_db):
+    project = create_project(ProjectCreate(name="Issue rules"))
+    epic = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.EPIC,
+            title="Launch",
+            start_date=date(2030, 6, 8),
+            due_date=date(2030, 6, 10),
+        )
+    )
+    dependency = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.FEATURE,
+            title="Blocked dependency",
+            status=CardStatus.BLOCKED,
+            due_date=date(2030, 6, 9),
+            parent_id=epic.id,
+        )
+    )
+    dependent = create_card(
+        ProjectCardCreate(
+            project_id=project.id,
+            card_type=CardType.STORY,
+            title="Dependent story",
+            start_date=date(2030, 6, 7),
+            parent_id=dependency.id,
+            dependency_ids=[dependency.id],
+        )
+    )
+
+    issues = list_project_issues(project.id)
+    issue_keys = {(issue.card_id, issue.type, issue.dependency_id) for issue in issues}
+
+    assert (epic.id, "hierarchy_date_conflict", dependent.id) in issue_keys
+    assert (dependent.id, "blocked_dependency", dependency.id) in issue_keys
+    assert (dependent.id, "date_conflict", dependency.id) in issue_keys
 
 
 def test_init_db_adds_new_columns_to_existing_cards_table(monkeypatch):

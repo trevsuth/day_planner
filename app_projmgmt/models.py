@@ -72,6 +72,15 @@ class ProjectCardActivity(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class ProjectCardIssue(BaseModel):
+    card_id: str
+    type: str
+    severity: str = "warning"
+    message: str
+    dependency_id: str | None = None
+    boundary: str | None = None
+
+
 class ProjectCardCreate(BaseModel):
     project_id: str
     card_type: CardType

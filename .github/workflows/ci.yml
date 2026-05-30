@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm --prefix web ci
+
+      - name: Install Playwright browser
+        run: npm --prefix web exec playwright install --with-deps chromium
+
+      - name: Lint Python
+        run: uv run ruff check app_planner app_projmgmt tests
+
+      - name: Run Python tests
+        run: uv run pytest
+
+      - name: Build frontend
+        run: npm --prefix web run build
+
+      - name: Typecheck frontend
+        run: npm --prefix web run typecheck
+
+      - name: Run frontend unit tests
+        run: npm --prefix web run test:unit
+
+      - name: Run browser smoke tests
+        run: npm --prefix web run test:e2e

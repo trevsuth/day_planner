@@ -8,15 +8,16 @@ from fastapi.staticfiles import StaticFiles
 
 from app_projmgmt.api import router as project_router
 from app_projmgmt.database import init_db as init_project_db
-from app_planner.database import (
-    assign_card_priority,
-    init_db,
-    load_entry,
-    save_entry,
-    unlink_card_priority,
-)
+from app_planner.database import init_db
 from app_planner.models import PlannerCardAssignment, PlannerEntry
-from app_projmgmt.database import get_card
+from app_planner.services import (
+    PlannerNotFoundError,
+    PlannerServiceError,
+    assign_project_card_to_priority,
+    get_planner_entry,
+    remove_project_card_priority,
+    save_planner_entry,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -48,46 +49,38 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-def empty_entry(entry_date: date) -> PlannerEntry:
-    return PlannerEntry(entry_date=entry_date)
-
-
 @app.get("/api/planner/entries/{entry_date}", response_model=PlannerEntry)
 def get_entry(entry_date: date) -> PlannerEntry:
-    return load_entry(entry_date.isoformat()) or empty_entry(entry_date)
+    return get_planner_entry(entry_date)
 
 
 @app.put("/api/planner/entries/{entry_date}", response_model=PlannerEntry)
 def put_entry(entry_date: date, entry: PlannerEntry) -> PlannerEntry:
-    if entry.entry_date != entry_date:
-        raise HTTPException(
-            status_code=400,
-            detail="Entry date in the URL must match the request body.",
-        )
-
-    save_entry(entry)
-    return entry
+    try:
+        return save_planner_entry(entry_date, entry)
+    except PlannerServiceError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.put("/api/planner/card-assignments/{card_id}", response_model=PlannerEntry)
 def put_card_assignment(
     card_id: str, assignment: PlannerCardAssignment
 ) -> PlannerEntry:
-    if not get_card(card_id):
-        raise HTTPException(status_code=404, detail="Card not found.")
     try:
-        return assign_card_priority(
-            assignment.entry_date.isoformat(),
+        return assign_project_card_to_priority(
             card_id,
+            assignment.entry_date,
             assignment.priority_text,
         )
-    except ValueError as error:
+    except PlannerNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except PlannerServiceError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.delete("/api/planner/card-assignments/{card_id}", status_code=204)
 def delete_card_assignment(card_id: str) -> None:
-    unlink_card_priority(card_id)
+    remove_project_card_priority(card_id)
 
 
 @app.get("/api/entries/{entry_date}", response_model=PlannerEntry)

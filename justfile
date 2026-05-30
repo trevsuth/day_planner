@@ -12,6 +12,10 @@ test:
 web-test:
     npm --prefix web run test:e2e
 
+# Run frontend domain unit tests
+web-unit:
+    npm --prefix web run test:unit
+
 # Export planner and project data to a portable JSON backup
 backup file="daily-planner-backup.json":
     uv run python -m app_planner.backup export "{{file}}"
@@ -125,6 +129,10 @@ podman-logs:
 # Build the React frontend
 web-build:
     npm --prefix web run build
+
+# Typecheck the TypeScript frontend foundation
+web-typecheck:
+    npm --prefix web run typecheck
 
 # Format the code with ruff
 format:

@@ -11,31 +11,53 @@ Keep the application lightweight in day-to-day use:
 
 ## Immediate
 
-1. Add continuous integration checks
-   - Run Python tests and lint checks on each push.
-   - Run the focused Playwright smoke tests against isolated databases.
-   - Keep the workflow small and fast enough to run routinely.
-
-2. Improve TUI project-card navigation
-   - Add quick search or jump-to-card.
-   - Make selection and parent-child context clearer.
-   - Reduce steps between selecting a card and editing its key fields.
-
-3. Add lightweight capacity warnings
-   - Warn when a future day already has all priority slots filled.
-   - Surface multiple cards assigned to the same day.
-   - Avoid automated scheduling until manual planning behavior is well understood.
-
-## Next
-
 1. Add recurring planner tasks
    - Support daily, weekly, and monthly recurrence with an optional end date.
    - Keep exceptions and skipped occurrences simple and understandable.
+   - Make recurrence visible in both the web planner and TUI without cluttering daily capture.
 
 2. Add reusable card templates
    - Pre-fill descriptions and deliverables for common card types.
    - Allow optional starter child cards.
    - Keep templates optional and out of the primary creation flow.
+
+3. Add a compact keyboard-shortcut reference
+   - Show web and TUI shortcuts from a small help panel.
+   - Keep it discoverable without adding persistent screen weight.
+   - Include project navigation, card editing, planner navigation, and assignment actions.
+
+## Next
+
+1. Improve import validation and reporting
+   - Show row-level CSV validation failures before import.
+   - Keep successful imports atomic so partial files do not leave confusing state.
+
+## Refactoring
+
+1. Continue splitting React UI components by feature
+   - Move planner components into `web/src/planner/`.
+   - Move project management views and card editor components into `web/src/projects/`.
+   - Keep API reference and app shell separate from feature-level state.
+
+2. Expand frontend domain tests
+   - Cover CSV parsing/import validation and planner-entry normalization.
+   - Add tests when extracted domain functions gain new behavior.
+   - Keep Playwright focused on workflow smoke coverage rather than every rule.
+
+3. Expand the Python service layer
+   - Move remaining shared planner save/load behavior into service calls where useful.
+   - Add service-level tests for project hierarchy and planner assignment behavior.
+   - Keep database modules focused on persistence.
+
+4. Use server-side issue results in the web UI
+   - Fetch `/api/projmgmt/projects/{project_id}/issues` alongside cards.
+   - Reconcile server issue records with the existing local issue badges.
+   - Keep local domain helpers for responsive previews, but avoid divergent warning behavior.
+
+5. Convert extracted frontend domain modules to TypeScript incrementally
+   - Start with `web/src/domain/planner.js` and `web/src/domain/csv.js`.
+   - Convert scheduling and card hierarchy logic after unit coverage is broad enough.
+   - Keep React components in JSX until feature modules are smaller.
 
 ## Later
 

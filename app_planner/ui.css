@@ -115,12 +115,16 @@ Checkbox {
 }
 
 #project-card-list {
-    height: 8;
+    height: 10;
 }
 
 #project-name,
 #epic-title,
 #child-title {
+    margin-top: 1;
+}
+
+#card-search {
     margin-top: 1;
 }
 
@@ -138,6 +142,7 @@ Checkbox {
 }
 
 #card-deliverables,
+#card-search,
 #card-edit-title,
 #card-edit-status,
 #card-edit-start-date,

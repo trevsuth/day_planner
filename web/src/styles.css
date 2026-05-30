@@ -2358,6 +2358,60 @@ textarea {
   color: var(--amber);
 }
 
+.planner-capacity-summary {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(91, 210, 234, 0.22);
+  background: rgba(1, 8, 12, 0.58);
+}
+
+.planner-capacity-summary > span,
+.planner-capacity-summary strong {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.planner-capacity-summary strong {
+  color: var(--amber);
+}
+
+.planner-capacity-summary ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.planner-capacity-summary li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.planner-capacity-summary li span {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid rgba(91, 210, 234, 0.35);
+  color: var(--line-strong);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.planner-capacity-summary li p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: none;
+}
+
 .hierarchy-shift-panel {
   display: flex;
   gap: 10px;

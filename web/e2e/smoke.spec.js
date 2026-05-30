@@ -141,6 +141,17 @@ test("assigns a project card to a future planner priority", async ({
     dependency_ids: [],
     deliverables: [],
   });
+  const fullDay = await request.put("/api/planner/entries/2031-01-17", {
+    data: {
+      entry_date: "2031-01-17",
+      priorities: ["One", "Two", "Three"],
+      priority_card_ids: [null, null, null],
+      tasks: [],
+      schedule: "",
+      notes: "",
+    },
+  });
+  expect(fullDay.ok()).toBeTruthy();
 
   await page.reload();
   await openProjects(page);
@@ -155,11 +166,16 @@ test("assigns a project card to a future planner priority", async ({
     .click();
 
   const assignment = page.locator(".planner-assignment-panel");
+  await assignment.getByLabel("Date").fill("2031-01-17");
+  await expect(assignment.getByText("3 of 3 priority slots used")).toBeVisible();
+  await expect(assignment.getByText("2031-01-17 is full.")).toBeVisible();
   await assignment.getByLabel("Date").fill("2031-01-15");
+  await expect(assignment.getByText("0 of 3 priority slots used")).toBeVisible();
   await assignment.getByRole("button", { name: "Assign" }).click();
   await expect(
     assignment.getByText("Assigned to 2031-01-15 priority 1."),
   ).toBeVisible();
+  await expect(assignment.getByText("1 of 3 priority slots used")).toBeVisible();
 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("heading", { name: "Edit Card" })).toBeHidden();

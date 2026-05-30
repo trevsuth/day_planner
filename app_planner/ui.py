@@ -8,14 +8,7 @@ from textual.containers import Horizontal, Vertical, Container
 from textual.widgets import Label, Static, Input, TextArea, Checkbox
 from app_planner.models import PlannerEntry, Task
 from app_planner.database import load_entry, save_entry, init_db
-from app_projmgmt.database import (
-    create_card,
-    create_project,
-    update_card,
-    init_db as init_project_db,
-    list_cards,
-    list_projects,
-)
+from app_projmgmt.database import init_db as init_project_db
 from app_projmgmt.models import (
     CardStatus,
     CardType,
@@ -23,6 +16,13 @@ from app_projmgmt.models import (
     ProjectCard,
     ProjectCardCreate,
     ProjectCreate,
+)
+from app_projmgmt.services import (
+    create_new_card,
+    create_new_project,
+    list_all_projects,
+    list_project_cards,
+    update_existing_card,
 )
 
 init_db()
@@ -80,6 +80,8 @@ class PlannerApp(App):
         ("ctrl+e", "create_epic", "Create epic"),
         ("f7", "create_child", "Create child"),
         ("ctrl+a", "create_child", "Create child"),
+        ("f3", "focus_card_search", "Search cards"),
+        ("ctrl+f", "focus_card_search", "Search cards"),
         ("f10", "save_card", "Save card"),
         ("pageup", "previous_project", "Previous project"),
         ("ctrl+up", "previous_project", "Previous project"),
@@ -127,6 +129,9 @@ class PlannerApp(App):
         self.epic_input = Input(placeholder="New epic title (F6)", id="epic-title")
         self.child_input = Input(
             placeholder="New child title for selected card (F7)", id="child-title"
+        )
+        self.card_search_input = Input(
+            placeholder="Search cards or jump to # (F3)", id="card-search"
         )
         self.deliverables_input = Input(
             placeholder="Deliverables, comma separated", id="card-deliverables"
@@ -184,6 +189,7 @@ class PlannerApp(App):
                 ),
                 Vertical(
                     Static("Cards"),
+                    self.card_search_input,
                     self.card_list,
                     Static("Add Cards"),
                     self.epic_input,
@@ -277,12 +283,12 @@ class PlannerApp(App):
         self.query_one("#planner-view").display = False
         self.query_one("#projects-view").display = True
         self.query_one("#mode-label", Label).update(
-            "Projects | F1 Planner | F5 Project | F6 Epic | F7 Child | F10 Save | PgUp/PgDn Project | F8/F9 Card"
+            "Projects | F1 Planner | F3 Search | F5 Project | F6 Epic | F7 Child | F10 Save | PgUp/PgDn Project | F8/F9 Card"
         )
         await self.reload_projects()
 
     async def reload_projects(self):
-        self.projects = list_projects()
+        self.projects = list_all_projects()
         if self.project_index >= len(self.projects):
             self.project_index = max(len(self.projects) - 1, 0)
         await self.reload_project_cards()
@@ -292,7 +298,7 @@ class PlannerApp(App):
     async def reload_project_cards(self):
         selected_id = self.selected_card.id if self.selected_card else None
         project = self.selected_project
-        self.project_cards = list_cards(project.id) if project else []
+        self.project_cards = list_project_cards(project.id) if project else []
         if selected_id:
             for index, card in enumerate(self.project_cards):
                 if card.id == selected_id:
@@ -333,20 +339,66 @@ class PlannerApp(App):
             self.populate_card_edit_form()
             return
 
-        card_lines = [f"{project.name}"]
-        for index, card in enumerate(self.project_cards):
+        filtered_cards = self.filtered_project_card_rows()
+        if not filtered_cards:
+            self.card_list.update(f"{project.name}\nNo cards match the search.")
+            return
+
+        card_lines = [
+            f"{project.name} | {len(filtered_cards)}/{len(self.project_cards)} cards"
+        ]
+        child_counts = self.child_counts()
+        for index, card in filtered_cards:
             marker = ">" if index == self.card_index else " "
             parent = self.card_parent_label(card)
+            children = child_counts.get(card.id, 0)
             deliverables = (
                 f" | deliverables: {', '.join(card.deliverables)}"
                 if card.deliverables
                 else ""
             )
+            indent = "  " * max(self.card_depth(card), 0)
             card_lines.append(
-                f"{marker} {index + 1}. [{CARD_TYPE_LABELS[card.card_type]}] {card.title}"
-                f" | {card.status.value.replace('_', ' ')} | parent: {parent}{deliverables}"
+                f"{marker} {index + 1}. {indent}[{CARD_TYPE_LABELS[card.card_type]}] {card.title}"
+                f" | {card.status.value.replace('_', ' ')} | parent: {parent}"
+                f" | children: {children}{deliverables}"
             )
         self.card_list.update("\n".join(card_lines))
+
+    def filtered_project_card_rows(self) -> list[tuple[int, ProjectCard]]:
+        query = self.card_search_input.value.strip().lower()
+        rows = list(enumerate(self.project_cards))
+        if not query or query.isdigit():
+            return rows
+        return [
+            (index, card)
+            for index, card in rows
+            if query in card.title.lower()
+            or query in card.status.value.replace("_", " ")
+            or query in CARD_TYPE_LABELS[card.card_type].lower()
+            or query in self.card_parent_label(card).lower()
+        ]
+
+    def child_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for card in self.project_cards:
+            if card.parent_id:
+                counts[card.parent_id] = counts.get(card.parent_id, 0) + 1
+        return counts
+
+    def card_depth(self, card: ProjectCard) -> int:
+        depth = 0
+        parent_id = card.parent_id
+        seen = {card.id}
+        cards_by_id = {candidate.id: candidate for candidate in self.project_cards}
+        while parent_id and parent_id not in seen:
+            seen.add(parent_id)
+            parent = cards_by_id.get(parent_id)
+            if not parent:
+                break
+            depth += 1
+            parent_id = parent.parent_id
+        return depth
 
     def card_parent_label(self, card) -> str:
         if not card.parent_id:
@@ -367,7 +419,7 @@ class PlannerApp(App):
             return
 
         description = self.project_description_area.text.strip() or None
-        create_project(ProjectCreate(name=name, description=description))
+        create_new_project(ProjectCreate(name=name, description=description))
         self.project_name_input.value = ""
         self.project_description_area.text = ""
         self.project_index = 0
@@ -379,7 +431,7 @@ class PlannerApp(App):
         if not project or not title:
             return
 
-        create_card(
+        create_new_card(
             ProjectCardCreate(
                 project_id=project.id,
                 card_type=CardType.EPIC,
@@ -402,7 +454,7 @@ class PlannerApp(App):
         if not child_type:
             return
 
-        create_card(
+        create_new_card(
             ProjectCardCreate(
                 project_id=parent.project_id,
                 card_type=child_type,
@@ -471,7 +523,17 @@ class PlannerApp(App):
                 self.edit_parent_input.value = str(index)
                 break
         self.edit_deliverables_input.value = ", ".join(card.deliverables)
-        self.edit_message.update(self.parent_edit_help(card, parents))
+        context = self.card_context_help(card)
+        parent_help = self.parent_edit_help(card, parents)
+        self.edit_message.update(f"{context} {parent_help}")
+
+    def card_context_help(self, card: ProjectCard) -> str:
+        children = self.child_counts().get(card.id, 0)
+        parent = self.card_parent_label(card)
+        return (
+            f"{CARD_TYPE_LABELS[card.card_type]} #{self.project_cards.index(card) + 1}"
+            f" | parent: {parent} | children: {children}."
+        )
 
     def parent_edit_help(self, card: ProjectCard, parents: list[ProjectCard]) -> str:
         if card.card_type == CardType.EPIC:
@@ -547,7 +609,7 @@ class PlannerApp(App):
         card.due_date = due_date
         card.parent_id = parent_id
         card.deliverables = self.edit_deliverables_from_form()
-        update_card(card)
+        update_existing_card(card.id, card)
         await self.reload_project_cards()
         self.render_project_lists()
         self.populate_card_edit_form()
@@ -565,9 +627,41 @@ class PlannerApp(App):
     def select_adjacent_card(self, direction: int):
         if not self.project_cards:
             return
-        self.card_index = (self.card_index + direction) % len(self.project_cards)
+        filtered_cards = self.filtered_project_card_rows()
+        if not filtered_cards:
+            return
+        filtered_indexes = [index for index, _ in filtered_cards]
+        if self.card_index in filtered_indexes:
+            filtered_position = filtered_indexes.index(self.card_index)
+            self.card_index = filtered_indexes[
+                (filtered_position + direction) % len(filtered_indexes)
+            ]
+        else:
+            self.card_index = filtered_indexes[0]
         self.render_project_lists()
         self.populate_card_edit_form()
+
+    def jump_to_card_from_search(self) -> bool:
+        query = self.card_search_input.value.strip()
+        if not query:
+            return False
+        if query.isdigit():
+            card_number = int(query)
+            if 1 <= card_number <= len(self.project_cards):
+                self.card_index = card_number - 1
+                self.card_search_input.value = ""
+                self.render_project_lists()
+                self.populate_card_edit_form()
+                self.edit_title_input.focus()
+                return True
+        filtered_cards = self.filtered_project_card_rows()
+        if filtered_cards:
+            self.card_index = filtered_cards[0][0]
+            self.render_project_lists()
+            self.populate_card_edit_form()
+            self.edit_title_input.focus()
+            return True
+        return False
 
     async def reload_entry(self):
         # Update date label
@@ -646,6 +740,10 @@ class PlannerApp(App):
         if self.active_view == "projects":
             await self.save_selected_card_from_form()
 
+    def action_focus_card_search(self) -> None:
+        if self.active_view == "projects":
+            self.card_search_input.focus()
+
     async def action_previous_project(self) -> None:
         if self.active_view == "projects":
             await self.select_adjacent_project(-1)
@@ -678,6 +776,8 @@ class PlannerApp(App):
                 await self.create_epic_from_form()
             elif event.key in {"f7", "ctrl+a", "ctrl_a"}:
                 await self.create_child_from_form()
+            elif event.key in {"f3", "ctrl+f", "ctrl_f"}:
+                self.card_search_input.focus()
             elif event.key == "f10":
                 await self.save_selected_card_from_form()
             elif event.key in {"pageup", "ctrl+up", "ctrl_up"}:
@@ -705,6 +805,21 @@ class PlannerApp(App):
             self.query_one("#task-0").focus()
         elif event.key in {"ctrl+4", "ctrl_4"}:
             self.query_one("#section-notes").focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id != "card-search" or self.active_view != "projects":
+            return
+        filtered_cards = self.filtered_project_card_rows()
+        if filtered_cards and self.card_index not in [
+            index for index, _ in filtered_cards
+        ]:
+            self.card_index = filtered_cards[0][0]
+            self.populate_card_edit_form()
+        self.render_project_lists()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "card-search" and self.active_view == "projects":
+            self.jump_to_card_from_search()
 
 
 if __name__ == "__main__":

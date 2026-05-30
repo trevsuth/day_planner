@@ -15,6 +15,7 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Project cards with linked epics and quick epic creation
 - Portfolio, roadmap, timeline, Gantt, calendar, and board views for project work
 - Drag-and-drop Kanban status updates in the web project board
+- Planner assignment warnings for full future days and already scheduled card priorities
 - Card comments with Markdown preview and Mermaid/MMD fenced block support
 - Project deletion from the Projects sidebar
 - FastAPI JSON API for web access
@@ -173,10 +174,14 @@ Run the focused browser smoke tests. Install Playwright's Chromium runtime once 
 
 ```bash
 npx --prefix web playwright install chromium
+just web-typecheck
+just web-unit
 just web-test
 ```
 
-The browser tests build the frontend, start an isolated local API server, and use temporary planner and project databases rather than your local application data.
+The frontend typecheck currently covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build the frontend, start an isolated local API server, and use temporary planner and project databases rather than your local application data.
+
+Continuous integration runs the same core checks on pushes to `main` and pull requests: Ruff, Python tests, frontend build, frontend typecheck, frontend unit tests, and the focused Playwright smoke tests with isolated databases.
 
 ## Backup And Restore
 
@@ -220,6 +225,7 @@ The web frontend talks to the FastAPI app through these endpoints:
 | `POST` | `/api/projmgmt/projects` | Create a project |
 | `DELETE` | `/api/projmgmt/projects/{project_id}` | Delete a project and its cards |
 | `GET` | `/api/projmgmt/projects/{project_id}/cards` | List project cards |
+| `GET` | `/api/projmgmt/projects/{project_id}/issues` | List server-side dependency and hierarchy schedule warnings |
 | `POST` | `/api/projmgmt/cards` | Create an epic, feature, story, or subtask |
 | `PUT` | `/api/projmgmt/cards/{card_id}` | Update a card |
 | `DELETE` | `/api/projmgmt/cards/{card_id}` | Delete a card |
@@ -238,7 +244,13 @@ Project
 
 In the Projects tab, opening a project card shows linked epics and an inline field for adding epics without leaving the project card. Opening an epic, feature, or story card shows its parent, child cards, valid parent choices, and an inline field for adding the next child type. Type a child card name and press `Enter` or click `Add`; the child is added to the list and the parent card stays open so multiple child cards can be created quickly. The API enforces the same hierarchy, so a story must be tied to a feature and a subtask must be tied to a story.
 
-Assigning a project card to a planner date creates a linked priority entry. Assigning the same card again moves that priority assignment to the new date. In the web planner, the small linked-card control opens its project card and the adjacent unlink control removes the assignment.
+Assigning a project card to a planner date creates a linked priority entry. Assigning the same card again moves that priority assignment to the new date. The card editor shows how many priority slots are already used for the selected date, warns when the day is full, and surfaces when multiple linked cards are already assigned to that date. In the web planner, the small linked-card control opens its project card and the adjacent unlink control removes the assignment.
+
+Project hierarchy, dependency, and schedule-warning rules are implemented server-side in the project management service layer. The web UI keeps matching local domain helpers for responsive rendering, and the API exposes project issue results for clients that need the server as the source of truth.
+
+## Platform Notes
+
+The current platform remains Python, FastAPI, SQLite, React, and Textual. This is intentional: it keeps the app lightweight, local-first, and easy to host per machine. Postgres, a different TUI framework, or a larger frontend framework should only be revisited if multi-user hosting, heavier concurrency, or blocked TUI workflows become real requirements.
 
 ## Controls
 
@@ -266,13 +278,14 @@ Project manager TUI shortcuts:
 | `F5` | Create a project from the project name and description fields |
 | `F6` | Add a backlog epic to the selected project |
 | `F7` | Add the next child type to the selected card |
+| `F3` | Focus card search; type text to filter or a card number to jump |
 | `F10` | Save edits to the selected card |
 | `PageUp` / `PageDown` | Select the previous or next project |
 | `F8` / `F9` | Select the previous or next card |
 
-The previous `Ctrl+P`, `Ctrl+N`, `Ctrl+E`, `Ctrl+A`, `Ctrl+Up` / `Ctrl+Down`, and `Ctrl+K` / `Ctrl+J` shortcuts remain available as alternates. In the TUI project view, select an epic and press `F7` to add a feature, select a feature and press `F7` to add a story, or select a story and press `F7` to add a subtask. Deliverables can be entered as a comma-separated list before adding a card.
+The previous `Ctrl+P`, `Ctrl+N`, `Ctrl+E`, `Ctrl+A`, `Ctrl+F`, `Ctrl+Up` / `Ctrl+Down`, and `Ctrl+K` / `Ctrl+J` shortcuts remain available as alternates. In the TUI project view, select an epic and press `F7` to add a feature, select a feature and press `F7` to add a story, or select a story and press `F7` to add a subtask. Deliverables can be entered as a comma-separated list before adding a card.
 
-The selected-card edit form updates as you move through cards with `F8` and `F9`. Edit the title, description, comments, status, start date, due date, parent number, or deliverables, then press `F10` to save. Status values are `backlog`, `in_progress`, `blocked`, and `done`. Dates use `YYYY-MM-DD`. Feature, story, and subtask cards require a parent number from the eligible parent list shown under the edit form.
+The selected-card edit form updates as you move through cards with `F8` and `F9`. Use `F3` to filter cards by title, type, status, or parent name; enter a card number and press `Enter` to jump directly to that card. Edit the title, description, comments, status, start date, due date, parent number, or deliverables, then press `F10` to save. Status values are `backlog`, `in_progress`, `blocked`, and `done`. Dates use `YYYY-MM-DD`. Feature, story, and subtask cards require a parent number from the eligible parent list shown under the edit form.
 
 Project manager web shortcuts:
 
@@ -340,6 +353,8 @@ Available `just` recipes:
 | --- | --- |
 | `just` | List all available recipes |
 | `just test` | Run the Python test suite |
+| `just web-typecheck` | Typecheck the TypeScript frontend foundation |
+| `just web-unit` | Run frontend domain unit tests |
 | `just web-test` | Run focused Playwright browser smoke tests using isolated databases |
 | `just backup [file]` | Export local planner and project data to portable JSON |
 | `just restore [file]` | Replace local data from a portable JSON backup |

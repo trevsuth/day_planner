@@ -24,306 +24,65 @@ import {
   Unlink,
   Upload,
 } from "lucide-react";
+import { request } from "./api/client";
+import {
+  activityFieldLabels,
+  CARD_TYPES,
+  cardTypeLabels,
+  childTypeByCardType,
+  defaultProjectFilters,
+  parentTypeByCardType,
+  PRIORITY_COUNT,
+  projectCardCsvHeaders,
+  PROJECT_VIEWS,
+  STATUSES,
+  statusLabels,
+} from "./domain/constants";
+import {
+  allCardIssues,
+  cardCanChangeType,
+  cardMatchesFilters,
+  cardPayload,
+  cardRelationshipLabel,
+  collectDescendants,
+  dependencyCardsFor,
+  dependencyDependentsFor,
+  dependencyEdgesForCards,
+  emptyCard,
+  formatActivityValue,
+  ganttScheduleForCard,
+  getHierarchyRows,
+  getScheduleBounds,
+  getScheduledCards,
+  getTimelinePoints,
+  hierarchyShiftForCard,
+  isOverdue,
+  projectIssuesForCards,
+  sortCardsForRoadmap,
+  summarizeCards,
+} from "./domain/cards";
+import {
+  csvHeaderMap,
+  csvValue,
+  downloadCsv,
+  normalizeCardStatus,
+  normalizeCardType,
+  parseCsv,
+  safeFilePart,
+  splitCsvList,
+} from "./domain/csv";
+import {
+  addDays,
+  daysBetween,
+  displayDate,
+  formatDateInput,
+  formatDateTime,
+  parseLocalDate,
+} from "./domain/dates";
+import { compactEntry, normalizeEntry, plannerPriorityText } from "./domain/planner";
 import "./styles.css";
 
-const TASK_COUNT = 5;
-const PRIORITY_COUNT = 3;
-const STATUSES = ["backlog", "in_progress", "blocked", "done"];
-const CARD_TYPES = ["epic", "feature", "story", "subtask"];
-
-const statusLabels = {
-  backlog: "Backlog",
-  in_progress: "In Progress",
-  blocked: "Blocked",
-  done: "Done",
-};
-
-const cardTypeLabels = {
-  epic: "Epic",
-  feature: "Feature",
-  story: "Story",
-  subtask: "Subtask",
-};
-
-const activityFieldLabels = {
-  card_type: "Type",
-  status: "Status",
-  start_date: "Start date",
-  due_date: "Due date",
-  parent_id: "Parent",
-  comments: "Comments",
-};
-
-const parentTypeByCardType = {
-  epic: null,
-  feature: "epic",
-  story: "feature",
-  subtask: "story",
-};
-
-const childTypeByCardType = {
-  epic: "feature",
-  feature: "story",
-  story: "subtask",
-  subtask: null,
-};
-
 const PROJECT_STATE_STORAGE_KEY = "dailyPlanner.projectState";
-
-const statusOrder = {
-  backlog: 0,
-  in_progress: 1,
-  blocked: 2,
-  done: 3,
-};
-
-const cardTypeOrder = {
-  epic: 0,
-  feature: 1,
-  story: 2,
-  subtask: 3,
-};
-
-const PROJECT_VIEWS = ["portfolio", "issues", "graph", "roadmap", "timeline", "gantt", "calendar", "board"];
-
-const projectCardCsvHeaders = [
-  "Project Name",
-  "Hierarchy Level",
-  "Card ID",
-  "Type",
-  "Title",
-  "Status",
-  "Parent ID",
-  "Parent Type",
-  "Parent Title",
-  "Dependency IDs",
-  "Dependency Titles",
-  "Start Date",
-  "Due Date",
-  "Deliverables",
-  "Description",
-  "Comments",
-  "Created At",
-  "Updated At",
-];
-
-const defaultProjectFilters = {
-  query: "",
-  cardTypes: [],
-  statuses: [],
-  schedule: "all",
-};
-
-function formatDateInput(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function parseLocalDate(value) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
-}
-
-function addDays(value, amount) {
-  const next = parseLocalDate(value);
-  next.setDate(next.getDate() + amount);
-  return formatDateInput(next);
-}
-
-function displayDate(value) {
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(parseLocalDate(value));
-}
-
-function normalizeEntry(entry, entryDate) {
-  const priorities = [...(entry.priorities ?? [])];
-  const priorityCardIds = [...(entry.priority_card_ids ?? [])];
-  const tasks = [...(entry.tasks ?? [])];
-
-  while (priorities.length < PRIORITY_COUNT) priorities.push("");
-  while (priorityCardIds.length < PRIORITY_COUNT) priorityCardIds.push(null);
-  while (tasks.length < TASK_COUNT) tasks.push({ text: "", completed: false });
-
-  return {
-    entry_date: entry.entry_date ?? entryDate,
-    priorities: priorities.slice(0, PRIORITY_COUNT),
-    priority_card_ids: priorityCardIds.slice(0, PRIORITY_COUNT),
-    tasks: tasks.slice(0, TASK_COUNT),
-    schedule: entry.schedule ?? "",
-    notes: entry.notes ?? "",
-  };
-}
-
-function compactEntry(entry) {
-  const nonEmptyPriorities = entry.priorities
-    .map((item, index) => ({
-      cardId: entry.priority_card_ids[index] || null,
-      text: item.trim(),
-    }))
-    .filter((item) => item.text);
-  return {
-    entry_date: entry.entry_date,
-    priorities: nonEmptyPriorities.map((item) => item.text),
-    priority_card_ids: nonEmptyPriorities.map((item) => item.cardId),
-    tasks: entry.tasks
-      .map((task) => ({ text: task.text.trim(), completed: task.completed }))
-      .filter((task) => task.text),
-    schedule: entry.schedule,
-    notes: entry.notes,
-  };
-}
-
-function emptyCard(projectId) {
-  return {
-    project_id: projectId,
-    card_type: "epic",
-    title: "",
-    description: "",
-    comments: "",
-    status: "backlog",
-    start_date: "",
-    due_date: "",
-    parent_id: "",
-    dependency_ids: [],
-    deliverables: [""],
-  };
-}
-
-function plannerPriorityText(card, project) {
-  const prefix = project?.name ? `${project.name} - ` : "";
-  return `${prefix}${cardTypeLabels[card.card_type]}: ${card.title}`.trim();
-}
-
-function csvEscape(value) {
-  const text = String(value ?? "");
-  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
-function downloadCsv(filename, rows) {
-  const csv = `${rows.map((row) => row.map(csvEscape).join(",")).join("\n")}\n`;
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function parseCsv(text) {
-  const rows = [];
-  let row = [];
-  let cell = "";
-  let inQuotes = false;
-
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const nextChar = text[index + 1];
-
-    if (char === '"') {
-      if (inQuotes && nextChar === '"') {
-        cell += '"';
-        index += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === "," && !inQuotes) {
-      row.push(cell);
-      cell = "";
-    } else if ((char === "\n" || char === "\r") && !inQuotes) {
-      if (char === "\r" && nextChar === "\n") index += 1;
-      row.push(cell);
-      if (row.some((value) => value.trim())) rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-
-  row.push(cell);
-  if (row.some((value) => value.trim())) rows.push(row);
-  return rows;
-}
-
-function csvHeaderMap(headers) {
-  return Object.fromEntries(headers.map((header, index) => [header.trim().toLowerCase(), index]));
-}
-
-function csvValue(row, headers, name) {
-  const index = headers[name.toLowerCase()];
-  return index === undefined ? "" : (row[index] || "").trim();
-}
-
-function splitCsvList(value) {
-  return value
-    .split(";")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeCardType(value) {
-  const normalized = value.trim().toLowerCase();
-  return CARD_TYPES.find((type) => type === normalized || cardTypeLabels[type].toLowerCase() === normalized) || "";
-}
-
-function normalizeCardStatus(value) {
-  const normalized = value.trim().toLowerCase();
-  return STATUSES.find((status) => status === normalized || statusLabels[status].toLowerCase() === normalized) || "backlog";
-}
-
-function cardPayload(card, overrides = {}) {
-  return {
-    card_type: overrides.card_type ?? card.card_type,
-    title: overrides.title ?? card.title,
-    description: overrides.description ?? card.description ?? null,
-    comments: overrides.comments ?? card.comments ?? null,
-    status: overrides.status ?? card.status,
-    start_date: overrides.start_date !== undefined ? overrides.start_date : card.start_date ?? null,
-    due_date: overrides.due_date !== undefined ? overrides.due_date : card.due_date ?? null,
-    parent_id: overrides.parent_id ?? card.parent_id ?? null,
-    dependency_ids: overrides.dependency_ids ?? card.dependency_ids ?? [],
-    deliverables: overrides.deliverables ?? card.deliverables ?? [],
-  };
-}
-
-function safeFilePart(value) {
-  return (value || "project")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "project";
-}
-
-function formatDateTime(value) {
-  if (!value) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatActivityValue(fieldName, value, cards) {
-  if (!value) return "None";
-  if (fieldName === "status") return statusLabels[value] || value;
-  if (fieldName === "parent_id") {
-    const parent = cards.find((card) => card.id === value);
-    return parent ? `${cardTypeLabels[parent.card_type]}: ${parent.title}` : value;
-  }
-  if (fieldName === "comments") {
-    const compact = value.replace(/\s+/g, " ").trim();
-    if (!compact) return "None";
-    return compact.length > 80 ? `${compact.slice(0, 77)}...` : compact;
-  }
-  return value;
-}
 
 function loadStoredProjectState() {
   try {
@@ -331,109 +90,6 @@ function loadStoredProjectState() {
   } catch {
     return {};
   }
-}
-
-function cardStart(card) {
-  return card.start_date || card.due_date || "";
-}
-
-function cardEnd(card) {
-  return card.due_date || card.start_date || "";
-}
-
-function descendantScheduleBounds(card, cards) {
-  const datedDescendants = collectDescendants(card.id, cards).filter(
-    (descendant) => descendant.start_date || descendant.due_date,
-  );
-  if (!datedDescendants.length) return null;
-
-  const starts = datedDescendants
-    .filter((descendant) => cardStart(descendant))
-    .sort((first, second) => cardStart(first).localeCompare(cardStart(second)) || first.title.localeCompare(second.title));
-  const ends = datedDescendants
-    .filter((descendant) => cardEnd(descendant))
-    .sort((first, second) => cardEnd(first).localeCompare(cardEnd(second)) || first.title.localeCompare(second.title));
-  return {
-    start: cardStart(starts[0]),
-    end: cardEnd(ends[ends.length - 1]),
-    startCard: starts[0],
-    endCard: ends[ends.length - 1],
-  };
-}
-
-function ganttScheduleForCard(card, cards) {
-  const descendantBounds = descendantScheduleBounds(card, cards);
-  const resolvedStart = card.start_date || descendantBounds?.start || card.due_date || "";
-  const resolvedEnd = card.due_date || descendantBounds?.end || card.start_date || "";
-  const isReversed = Boolean(resolvedStart && resolvedEnd && resolvedEnd < resolvedStart);
-  return {
-    start: isReversed ? resolvedEnd : resolvedStart,
-    end: isReversed ? resolvedStart : resolvedEnd,
-    startCard: descendantBounds?.startCard,
-    endCard: descendantBounds?.endCard,
-    isDerived: Boolean(
-      descendantBounds && (!card.start_date || !card.due_date),
-    ),
-  };
-}
-
-function daysBetween(start, end) {
-  const startDate = parseLocalDate(start);
-  const endDate = parseLocalDate(end);
-  return Math.round((endDate - startDate) / 86400000);
-}
-
-function getScheduledCards(cards) {
-  return cards.filter((card) => card.start_date || card.due_date);
-}
-
-function getScheduleBounds(cards) {
-  const scheduled = getScheduledCards(cards);
-  if (!scheduled.length) {
-    const today = formatDateInput(new Date());
-    return { start: today, end: addDays(today, 30) };
-  }
-
-  const starts = scheduled.map(cardStart).filter(Boolean).sort();
-  const ends = scheduled.map(cardEnd).filter(Boolean).sort();
-  const start = starts[0];
-  const end = ends[ends.length - 1];
-  return { start, end: end < start ? start : end };
-}
-
-function getTimelinePoints(cards) {
-  return getScheduledCards(cards)
-    .flatMap((card) => [
-      card.start_date ? { date: card.start_date, kind: "Start", card } : null,
-      card.due_date ? { date: card.due_date, kind: "Due", card } : null,
-    ])
-    .filter(Boolean)
-    .sort((first, second) => first.date.localeCompare(second.date) || first.card.title.localeCompare(second.card.title));
-}
-
-function getHierarchyRows(cards, expandedIds) {
-  const cardsById = new Map(cards.map((card) => [card.id, card]));
-
-  function childCards(parentId) {
-    return sortCardsForRoadmap(cards.filter((card) => card.parent_id === parentId));
-  }
-
-  function appendRows(parentId, level) {
-    return childCards(parentId).flatMap((card) => {
-      const children = childCards(card.id);
-      const row = { card, childrenCount: children.length, isExpanded: expandedIds.has(card.id), level };
-      if (!children.length || !expandedIds.has(card.id)) return [row];
-      return [row, ...appendRows(card.id, level + 1)];
-    });
-  }
-
-  const roots = sortCardsForRoadmap(cards.filter((card) => !card.parent_id || !cardsById.has(card.parent_id)));
-  return roots.flatMap((card) => {
-    const children = childCards(card.id);
-    const row = { card, childrenCount: children.length, isExpanded: expandedIds.has(card.id), level: 0 };
-    if (!children.length || !expandedIds.has(card.id)) return [row];
-    return [row, ...appendRows(card.id, 1)];
-  });
 }
 
 function escapeHtml(value) {
@@ -517,211 +173,6 @@ function markdownToHtml(value = "") {
   flushList();
   if (codeFence) flushCode();
   return html.join("");
-}
-
-function cardRelationshipLabel(card, cards) {
-  const parent = cards.find((candidate) => candidate.id === card.parent_id);
-  if (!parent) return "No parent";
-  return `${cardTypeLabels[parent.card_type]}: ${parent.title}`;
-}
-
-function isOverdue(card) {
-  return Boolean(card.due_date && card.status !== "done" && card.due_date < formatDateInput(new Date()));
-}
-
-function isDueSoon(card) {
-  const today = formatDateInput(new Date());
-  const soon = addDays(today, 14);
-  return Boolean(card.due_date && card.status !== "done" && card.due_date >= today && card.due_date <= soon);
-}
-
-function cardMatchesFilters(card, filters) {
-  if (filters.cardTypes.length && !filters.cardTypes.includes(card.card_type)) return false;
-  if (filters.statuses.length && !filters.statuses.includes(card.status)) return false;
-
-  if (filters.schedule === "blocked" && card.status !== "blocked") return false;
-  if (filters.schedule === "overdue" && !isOverdue(card)) return false;
-  if (filters.schedule === "due_soon" && !isDueSoon(card)) return false;
-  if (filters.schedule === "undated" && (card.start_date || card.due_date)) return false;
-
-  const query = filters.query.trim().toLowerCase();
-  if (!query) return true;
-
-  const searchable = [
-    card.title,
-    card.description,
-    card.comments,
-    ...(card.deliverables || []),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return searchable.includes(query);
-}
-
-function dependencyCardsFor(card, cards) {
-  const dependencyIds = card.dependency_ids || [];
-  return dependencyIds.map((dependencyId) => cards.find((candidate) => candidate.id === dependencyId)).filter(Boolean);
-}
-
-function cardDependencyIssues(card, cards) {
-  const issues = [];
-  const dependencies = dependencyCardsFor(card, cards);
-
-  dependencies.forEach((dependency) => {
-    if (dependency.status === "blocked" && card.status !== "done") {
-      issues.push({
-        type: "blocked_dependency",
-        severity: "warning",
-        dependency,
-        message: `Depends on blocked card "${dependency.title}".`,
-      });
-    }
-
-    if (dependency.due_date && card.start_date && card.start_date < dependency.due_date) {
-      issues.push({
-        type: "date_conflict",
-        severity: "warning",
-        dependency,
-        message: `Starts ${card.start_date} before dependency "${dependency.title}" is due ${dependency.due_date}.`,
-      });
-    } else if (dependency.due_date && card.due_date && card.due_date < dependency.due_date) {
-      issues.push({
-        type: "date_conflict",
-        severity: "warning",
-        dependency,
-        message: `Due ${card.due_date} before dependency "${dependency.title}" is due ${dependency.due_date}.`,
-      });
-    }
-  });
-
-  return issues;
-}
-
-function projectIssuesForCards(cards) {
-  return cards
-    .map((card) => ({
-      card,
-      issues: [...cardDependencyIssues(card, cards), ...cardHierarchyDateIssues(card, cards)],
-    }))
-    .filter((item) => item.issues.length);
-}
-
-function cardHierarchyDateIssues(card, cards) {
-  if (!card.start_date && !card.due_date) return [];
-  const descendantBounds = descendantScheduleBounds(card, cards);
-  if (!descendantBounds) return [];
-
-  const issues = [];
-  if (card.start_date && descendantBounds.start < card.start_date) {
-    issues.push({
-      type: "hierarchy_date_conflict",
-      boundary: "start",
-      severity: "warning",
-      dependency: descendantBounds.startCard,
-      message: `"${descendantBounds.startCard.title}" begins ${descendantBounds.start} before this card starts ${card.start_date}.`,
-    });
-  }
-  if (card.due_date && descendantBounds.end > card.due_date) {
-    issues.push({
-      type: "hierarchy_date_conflict",
-      boundary: "end",
-      severity: "warning",
-      dependency: descendantBounds.endCard,
-      message: `"${descendantBounds.endCard.title}" ends ${descendantBounds.end} after this card is due ${card.due_date}.`,
-    });
-  }
-  return issues;
-}
-
-function allCardIssues(card, cards) {
-  return [...cardDependencyIssues(card, cards), ...cardHierarchyDateIssues(card, cards)];
-}
-
-function dependencyDependentsFor(cardId, cards) {
-  return cards.filter((card) => (card.dependency_ids || []).includes(cardId));
-}
-
-function cardCanChangeType(card, nextType, cards) {
-  if (card.card_type === nextType) return true;
-  if (cards.some((candidate) => candidate.parent_id === card.id)) return false;
-
-  const expectedParentType = parentTypeByCardType[nextType];
-  if (!expectedParentType) return !card.parent_id;
-
-  const parent = cards.find((candidate) => candidate.id === card.parent_id);
-  return parent?.card_type === expectedParentType;
-}
-
-function hierarchyShiftForCard(card, nextType, cards) {
-  const storedCard = cards.find((candidate) => candidate.id === card.id);
-  if (!storedCard || storedCard.card_type === nextType) return null;
-
-  const offset = cardTypeOrder[nextType] - cardTypeOrder[storedCard.card_type];
-  const descendants = collectDescendants(card.id, cards);
-  return {
-    descendants,
-    direction: offset > 0 ? "down" : "up",
-    levels: Math.abs(offset),
-    isBlocked: descendants.some(
-      (descendant) => cardTypeOrder[descendant.card_type] + offset > cardTypeOrder.subtask,
-    ),
-  };
-}
-
-function dependencyEdgesForCards(cards) {
-  return cards.flatMap((card) =>
-    (card.dependency_ids || [])
-      .map((dependencyId) => {
-        const dependency = cards.find((candidate) => candidate.id === dependencyId);
-        if (!dependency) return null;
-        const issues = cardDependencyIssues(card, cards).filter((issue) => issue.dependency.id === dependency.id);
-        return { dependency, dependent: card, issues };
-      })
-      .filter(Boolean),
-  );
-}
-
-function summarizeCards(cards) {
-  const byStatus = Object.fromEntries(STATUSES.map((status) => [status, 0]));
-  const byType = Object.fromEntries(CARD_TYPES.map((type) => [type, 0]));
-  let overdue = 0;
-  let dueSoon = 0;
-  let nextDueDate = "";
-  const today = formatDateInput(new Date());
-  const soon = addDays(today, 14);
-
-  for (const card of cards) {
-    byStatus[card.status] += 1;
-    byType[card.card_type] += 1;
-    if (isOverdue(card)) overdue += 1;
-    if (card.due_date && card.status !== "done" && card.due_date >= today && card.due_date <= soon) dueSoon += 1;
-    if (card.due_date && card.status !== "done" && (!nextDueDate || card.due_date < nextDueDate)) {
-      nextDueDate = card.due_date;
-    }
-  }
-
-  return {
-    total: cards.length,
-    byStatus,
-    byType,
-    blocked: byStatus.blocked,
-    done: byStatus.done,
-    overdue,
-    dueSoon,
-    nextDueDate,
-    completion: cards.length ? Math.round((byStatus.done / cards.length) * 100) : 0,
-  };
-}
-
-function sortCardsForRoadmap(cards) {
-  return [...cards].sort((first, second) => {
-    const firstDue = first.due_date || "9999-12-31";
-    const secondDue = second.due_date || "9999-12-31";
-    if (firstDue !== secondDue) return firstDue.localeCompare(secondDue);
-    return statusOrder[first.status] - statusOrder[second.status] || first.title.localeCompare(second.title);
-  });
 }
 
 function IconButton({ label, children, ...props }) {
@@ -955,7 +406,6 @@ function PlannerApp({ onOpenLinkedCard }) {
 
   async function selectDate(nextDate) {
     if (nextDate === entryDate) return;
-    if (status === "loading") return;
     if (isDirty && !(await saveEntry())) return;
     setEntryDate(nextDate);
   }
@@ -1369,19 +819,6 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
       projectNameInputRef.current?.focus();
     }
   }, [isProjectSwitcherOpen]);
-
-  async function request(path, options = {}) {
-    const response = await fetch(path, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data.detail || `Request failed with ${response.status}`);
-    }
-    if (response.status === 204) return null;
-    return response.json();
-  }
 
   async function loadProjects() {
     setError("");
@@ -1806,10 +1243,14 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
         }),
       });
       const assignedIndex = updatedEntry.priority_card_ids.findIndex((cardId) => cardId === card.id);
-      return { ok: true, message: `Assigned to ${plannerDate} priority ${assignedIndex + 1}.` };
+      return { ok: true, entry: updatedEntry, message: `Assigned to ${plannerDate} priority ${assignedIndex + 1}.` };
     } catch (err) {
       return { ok: false, message: err.message || "Could not assign card to planner." };
     }
+  }
+
+  async function loadPlannerEntry(entryDate) {
+    return request(`/api/planner/entries/${entryDate}`);
   }
 
   function exportActiveProjectCards() {
@@ -2236,6 +1677,7 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
           onAssignToPlanner={assignCardToPlanner}
           onCreateChild={(parent, title) => createInlineCard({ parent, title })}
           onDelete={deleteSelectedCard}
+          onLoadPlannerEntry={loadPlannerEntry}
           onSubmit={saveCard}
         />
       ) : null}
@@ -2322,6 +1764,11 @@ const projectEndpoints = [
     method: "GET",
     path: "/api/projmgmt/projects/{project_id}/cards",
     purpose: "List cards for one project.",
+  },
+  {
+    method: "GET",
+    path: "/api/projmgmt/projects/{project_id}/issues",
+    purpose: "List server-side dependency and hierarchy schedule warnings for one project.",
   },
   {
     method: "POST",
@@ -3440,11 +2887,6 @@ function EmptyState({ actionLabel, label, onAction }) {
   );
 }
 
-function collectDescendants(parentId, cards) {
-  const directChildren = cards.filter((card) => card.parent_id === parentId);
-  return directChildren.flatMap((child) => [child, ...collectDescendants(child.id, cards)]);
-}
-
 function MetricTile({ label, tone = "", value }) {
   return (
     <div className={`metric-tile ${tone}`}>
@@ -3752,9 +3194,22 @@ function ProjectEditor({ cards, onCancel, onChange, onCreateEpic, onDelete, onOp
   );
 }
 
-function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChange, onCreateChild, onDelete, onSubmit }) {
+function CardEditor({
+  activity,
+  card,
+  cards,
+  onAssignToPlanner,
+  onCancel,
+  onChange,
+  onCreateChild,
+  onDelete,
+  onLoadPlannerEntry,
+  onSubmit,
+}) {
   const defaultPlannerDate = card.due_date || card.start_date || formatDateInput(new Date());
   const [plannerDate, setPlannerDate] = useState(defaultPlannerDate);
+  const [plannerEntry, setPlannerEntry] = useState(null);
+  const [plannerLookupStatus, setPlannerLookupStatus] = useState("");
   const [plannerAssignStatus, setPlannerAssignStatus] = useState("");
   const [isAssigningPlanner, setIsAssigningPlanner] = useState(false);
   const [isDependenciesOpen, setIsDependenciesOpen] = useState(false);
@@ -3774,8 +3229,29 @@ function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChan
   useEffect(() => {
     setPlannerDate(defaultPlannerDate);
     setPlannerAssignStatus("");
+    setPlannerEntry(null);
+    setPlannerLookupStatus("");
     setIsDependenciesOpen(false);
   }, [card.id, defaultPlannerDate]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    setPlannerLookupStatus("");
+    setPlannerEntry(null);
+    if (!plannerDate || !onLoadPlannerEntry) return () => {};
+
+    onLoadPlannerEntry(plannerDate)
+      .then((entry) => {
+        if (isCurrent) setPlannerEntry(normalizeEntry(entry, plannerDate));
+      })
+      .catch(() => {
+        if (isCurrent) setPlannerLookupStatus("Could not check this date.");
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [card.id, onLoadPlannerEntry, plannerDate]);
 
   function updateField(field, value) {
     onChange({ ...card, [field]: value });
@@ -3819,9 +3295,20 @@ function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChan
     setIsAssigningPlanner(true);
     setPlannerAssignStatus("");
     const result = await onAssignToPlanner(card, plannerDate);
+    if (result.entry) {
+      setPlannerEntry(normalizeEntry(result.entry, plannerDate));
+    }
     setPlannerAssignStatus(result.message);
     setIsAssigningPlanner(false);
   }
+
+  const plannerPriorities = (plannerEntry?.priorities || []).filter((priority) => priority.trim());
+  const plannerLinkedCardIds = (plannerEntry?.priority_card_ids || []).filter(Boolean);
+  const existingAssignmentIndex = (plannerEntry?.priority_card_ids || []).findIndex((cardId) => cardId === card.id);
+  const hasOpenPlannerSlot = plannerPriorities.length < PRIORITY_COUNT || existingAssignmentIndex !== -1;
+  const linkedCardsOnDate = plannerLinkedCardIds
+    .map((cardId) => cards.find((candidate) => candidate.id === cardId))
+    .filter(Boolean);
 
   return (
     <div className="editor-backdrop" role="presentation">
@@ -3954,6 +3441,25 @@ function CardEditor({ activity, card, cards, onAssignToPlanner, onCancel, onChan
               <CalendarDays size={18} />
               <span>{isAssigningPlanner ? "Assigning" : "Assign"}</span>
             </button>
+          </div>
+          <div className="planner-capacity-summary">
+            <span>{plannerPriorities.length} of {PRIORITY_COUNT} priority slots used</span>
+            {plannerLookupStatus ? <strong>{plannerLookupStatus}</strong> : null}
+            {!hasOpenPlannerSlot ? <strong>{plannerDate} is full.</strong> : null}
+            {existingAssignmentIndex !== -1 ? <strong>This card is already priority {existingAssignmentIndex + 1} on this date.</strong> : null}
+            {linkedCardsOnDate.length > 1 ? (
+              <strong>{linkedCardsOnDate.length} linked cards are assigned to this date.</strong>
+            ) : null}
+            {plannerPriorities.length ? (
+              <ul>
+                {plannerPriorities.map((priority, index) => (
+                  <li key={`${priority}-${index}`}>
+                    <span>{index + 1}</span>
+                    <p>{priority}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           {plannerAssignStatus ? <p>{plannerAssignStatus}</p> : null}
         </section>
