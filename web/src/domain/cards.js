@@ -244,6 +244,29 @@ export function projectIssuesForCards(cards) {
     .filter((item) => item.issues.length);
 }
 
+export function issueGroupsFromIssueRecords(cards, issueRecords) {
+  const cardsById = new Map(cards.map((card) => [card.id, card]));
+  const grouped = new Map();
+
+  for (const record of issueRecords || []) {
+    const card = cardsById.get(record.card_id);
+    if (!card) continue;
+    const dependency = record.dependency_id ? cardsById.get(record.dependency_id) : null;
+    const issue = {
+      type: record.type,
+      severity: record.severity || "warning",
+      dependency,
+      boundary: record.boundary || "",
+      message: record.message,
+    };
+    const current = grouped.get(card.id) || { card, issues: [] };
+    current.issues.push(issue);
+    grouped.set(card.id, current);
+  }
+
+  return [...grouped.values()];
+}
+
 export function cardHierarchyDateIssues(card, cards) {
   if (!card.start_date && !card.due_date) return [];
   const descendantBounds = descendantScheduleBounds(card, cards);

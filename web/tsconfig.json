@@ -9,5 +9,11 @@
     "strict": true,
     "target": "ES2022"
   },
-  "include": ["src/api/**/*.ts", "src/domain/**/*.ts"]
+  "include": [
+    "src/api/**/*.ts",
+    "src/domain/constants.d.ts",
+    "src/domain/csv.ts",
+    "src/domain/planner.ts",
+    "src/domain/types.ts"
+  ]
 }

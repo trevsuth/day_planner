@@ -14,6 +14,13 @@ from app_planner.database import (
     unlink_card_priority,
 )
 from app_planner.models import PlannerEntry, Task
+from app_planner.services import (
+    PlannerNotFoundError,
+    PlannerServiceError,
+    assign_project_card_to_priority,
+    get_planner_entry,
+    save_planner_entry,
+)
 
 
 @pytest.fixture
@@ -145,3 +152,35 @@ def test_assigning_card_to_full_day_keeps_existing_link(temp_db):
     original = load_entry("2026-06-01")
     assert original is not None
     assert original.priority_card_ids == ["card-1"]
+
+
+def test_planner_service_loads_empty_entries_and_rejects_date_mismatch(temp_db):
+    empty = get_planner_entry(date(2030, 1, 2))
+    assert empty.entry_date == date(2030, 1, 2)
+    assert empty.priorities == []
+
+    with pytest.raises(PlannerServiceError, match="Entry date"):
+        save_planner_entry(
+            date(2030, 1, 2),
+            PlannerEntry(entry_date=date(2030, 1, 3)),
+        )
+
+
+def test_planner_service_assigns_known_project_cards(monkeypatch, temp_db):
+    monkeypatch.setattr("app_planner.services.get_card", lambda card_id: object())
+
+    assigned = assign_project_card_to_priority(
+        "card-1",
+        date(2030, 1, 2),
+        "Feature: Review",
+    )
+
+    assert assigned.priorities == ["Feature: Review"]
+    assert assigned.priority_card_ids == ["card-1"]
+
+
+def test_planner_service_rejects_missing_project_cards(monkeypatch, temp_db):
+    monkeypatch.setattr("app_planner.services.get_card", lambda card_id: None)
+
+    with pytest.raises(PlannerNotFoundError):
+        assign_project_card_to_priority("missing", date(2030, 1, 2), "Missing")

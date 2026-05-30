@@ -1,11 +1,12 @@
 import { CARD_TYPES, cardTypeLabels, STATUSES, statusLabels } from "./constants.js";
+import type { CardStatus, CardType } from "./types";
 
-function csvEscape(value) {
+function csvEscape(value: unknown): string {
   const text = String(value ?? "");
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-export function downloadCsv(filename, rows) {
+export function downloadCsv(filename: string, rows: unknown[][]): void {
   const csv = `${rows.map((row) => row.map(csvEscape).join(",")).join("\n")}\n`;
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -18,9 +19,9 @@ export function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
-export function parseCsv(text) {
-  const rows = [];
-  let row = [];
+export function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
   let cell = "";
   let inQuotes = false;
 
@@ -54,33 +55,33 @@ export function parseCsv(text) {
   return rows;
 }
 
-export function csvHeaderMap(headers) {
+export function csvHeaderMap(headers: string[]): Record<string, number> {
   return Object.fromEntries(headers.map((header, index) => [header.trim().toLowerCase(), index]));
 }
 
-export function csvValue(row, headers, name) {
+export function csvValue(row: string[], headers: Record<string, number>, name: string): string {
   const index = headers[name.toLowerCase()];
   return index === undefined ? "" : (row[index] || "").trim();
 }
 
-export function splitCsvList(value) {
+export function splitCsvList(value: string): string[] {
   return value
     .split(";")
     .map((item) => item.trim())
     .filter(Boolean);
 }
 
-export function normalizeCardType(value) {
+export function normalizeCardType(value: string): CardType | "" {
   const normalized = value.trim().toLowerCase();
   return CARD_TYPES.find((type) => type === normalized || cardTypeLabels[type].toLowerCase() === normalized) || "";
 }
 
-export function normalizeCardStatus(value) {
+export function normalizeCardStatus(value: string): CardStatus {
   const normalized = value.trim().toLowerCase();
   return STATUSES.find((status) => status === normalized || statusLabels[status].toLowerCase() === normalized) || "backlog";
 }
 
-export function safeFilePart(value) {
+export function safeFilePart(value: string): string {
   return (value || "project")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

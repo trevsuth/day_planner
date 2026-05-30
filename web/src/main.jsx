@@ -4,7 +4,6 @@ import {
   AlertCircle,
   BarChart3,
   CalendarDays,
-  Check,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -24,6 +23,7 @@ import {
   Unlink,
   Upload,
 } from "lucide-react";
+import { ApiReference } from "./api-reference/ApiReference";
 import { request } from "./api/client";
 import {
   activityFieldLabels,
@@ -56,6 +56,7 @@ import {
   getScheduledCards,
   getTimelinePoints,
   hierarchyShiftForCard,
+  issueGroupsFromIssueRecords,
   isOverdue,
   projectIssuesForCards,
   sortCardsForRoadmap,
@@ -80,6 +81,7 @@ import {
   parseLocalDate,
 } from "./domain/dates";
 import { compactEntry, normalizeEntry, plannerPriorityText } from "./domain/planner";
+import { IconButton, Section, StatusLine } from "./shared/components";
 import "./styles.css";
 
 const PROJECT_STATE_STORAGE_KEY = "dailyPlanner.projectState";
@@ -173,26 +175,6 @@ function markdownToHtml(value = "") {
   flushList();
   if (codeFence) flushCode();
   return html.join("");
-}
-
-function IconButton({ label, children, ...props }) {
-  return (
-    <button className="icon-button" type="button" aria-label={label} title={label} {...props}>
-      {children}
-    </button>
-  );
-}
-
-function Section({ icon, title, children, className = "" }) {
-  return (
-    <section className={`panel ${className}`}>
-      <header className="panel-header">
-        {icon}
-        <h2>{title}</h2>
-      </header>
-      {children}
-    </section>
-  );
 }
 
 function App() {
@@ -593,6 +575,7 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
   const [activeProjectId, setActiveProjectId] = useState(storedProjectState.activeProjectId || "");
   const [cards, setCards] = useState([]);
   const [projectCardsById, setProjectCardsById] = useState({});
+  const [projectIssuesById, setProjectIssuesById] = useState({});
   const [cardActivityById, setCardActivityById] = useState({});
   const [projectView, setProjectView] = useState(
     PROJECT_VIEWS.includes(storedProjectState.projectView) ? storedProjectState.projectView : "portfolio",
@@ -630,7 +613,8 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
   const filteredCards = cards.filter((card) => cardMatchesFilters(card, projectFilters));
   const selectedBulkCards = cards.filter((card) => selectedBulkCardIds.includes(card.id));
   const activeProjectSummary = summarizeCards(cards);
-  const activeProjectIssueCount = projectIssuesForCards(cards).length;
+  const activeProjectIssueRecords = projectIssuesById[activeProjectId] || [];
+  const activeProjectIssueCount = issueGroupsFromIssueRecords(cards, activeProjectIssueRecords).length || projectIssuesForCards(cards).length;
   const filteredProjectCardsById = Object.fromEntries(
     Object.entries(projectCardsById).map(([projectId, projectCards]) => [
       projectId,
@@ -669,6 +653,7 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
       loadCards(activeProjectId);
     } else {
       setCards([]);
+      setProjectIssuesById({});
     }
   }, [activeProjectId]);
 
@@ -837,24 +822,33 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
   async function refreshProjectCardCache(projectList = projects) {
     if (!projectList.length) {
       setProjectCardsById({});
+      setProjectIssuesById({});
       return;
     }
 
     const entries = await Promise.all(
       projectList.map(async (project) => {
-        const projectCards = await request(`/api/projmgmt/projects/${project.id}/cards`);
-        return [project.id, projectCards];
+        const [projectCards, projectIssues] = await Promise.all([
+          request(`/api/projmgmt/projects/${project.id}/cards`),
+          request(`/api/projmgmt/projects/${project.id}/issues`),
+        ]);
+        return [project.id, projectCards, projectIssues];
       }),
     );
-    setProjectCardsById(Object.fromEntries(entries));
+    setProjectCardsById(Object.fromEntries(entries.map(([projectId, projectCards]) => [projectId, projectCards])));
+    setProjectIssuesById(Object.fromEntries(entries.map(([projectId, , projectIssues]) => [projectId, projectIssues])));
   }
 
   async function loadCards(projectId) {
     setError("");
     try {
-      const data = await request(`/api/projmgmt/projects/${projectId}/cards`);
+      const [data, issueData] = await Promise.all([
+        request(`/api/projmgmt/projects/${projectId}/cards`),
+        request(`/api/projmgmt/projects/${projectId}/issues`),
+      ]);
       setCards(data);
       setProjectCardsById((current) => ({ ...current, [projectId]: data }));
+      setProjectIssuesById((current) => ({ ...current, [projectId]: issueData }));
       setStatus("Ready");
     } catch (err) {
       setError("Could not load project cards.");
@@ -1002,6 +996,17 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
       return next;
     });
     setPreviewCard((current) => (current ? savedCards.find((saved) => saved.id === current.id) || current : current));
+    refreshProjectIssues(savedCards[0]?.project_id || activeProjectId);
+  }
+
+  async function refreshProjectIssues(projectId = activeProjectId) {
+    if (!projectId) return;
+    try {
+      const issueData = await request(`/api/projmgmt/projects/${projectId}/issues`);
+      setProjectIssuesById((current) => ({ ...current, [projectId]: issueData }));
+    } catch {
+      // Local issue helpers still render warnings if the server-side issue refresh fails.
+    }
   }
 
   function toggleBulkCard(cardId) {
@@ -1110,6 +1115,7 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
         ...current,
         [projectId]: [...(current[projectId] || []), saved],
       }));
+      refreshProjectIssues(projectId);
       setError("");
       return saved;
     } catch (err) {
@@ -1170,6 +1176,8 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
       setPreviewCard(saved);
       if (hierarchyChanged) {
         await loadCards(activeProjectId);
+      } else {
+        refreshProjectIssues(saved.project_id);
       }
       setError("");
     } catch (err) {
@@ -1200,6 +1208,7 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
         ...current,
         [selectedCard.project_id]: (current[selectedCard.project_id] || []).filter((card) => card.id !== selectedCard.id),
       }));
+      refreshProjectIssues(selectedCard.project_id);
       setSelectedCard(null);
       setPreviewCard((current) => (current?.id === selectedCard.id ? null : current));
       setError("");
@@ -1609,6 +1618,7 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
         {projectView === "issues" ? (
           <ProjectIssues
             cards={filteredCards}
+            issueRecords={activeProjectIssueRecords}
             onMoveCard={moveCardToStatus}
             onOpenCard={setPreviewCard}
             onStartNewCard={startNewCard}
@@ -1699,232 +1709,6 @@ function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
       ) : null}
     </>
   );
-}
-
-const plannerEndpoints = [
-  {
-    method: "GET",
-    path: "/api/planner/entries/{entry_date}",
-    purpose: "Load one planner entry. Returns an empty entry when none exists.",
-  },
-  {
-    method: "PUT",
-    path: "/api/planner/entries/{entry_date}",
-    purpose: "Create or replace one planner entry. URL date must match body entry_date.",
-  },
-  {
-    method: "PUT",
-    path: "/api/planner/card-assignments/{card_id}",
-    purpose: "Assign or move a linked card into a planner priority slot.",
-  },
-  {
-    method: "DELETE",
-    path: "/api/planner/card-assignments/{card_id}",
-    purpose: "Remove a linked card from its planner priority slot.",
-  },
-  {
-    method: "GET",
-    path: "/api/entries/{entry_date}",
-    purpose: "Legacy alias for loading planner entries.",
-  },
-  {
-    method: "PUT",
-    path: "/api/entries/{entry_date}",
-    purpose: "Legacy alias for saving planner entries.",
-  },
-];
-
-const projectEndpoints = [
-  {
-    method: "GET",
-    path: "/api/projmgmt/projects",
-    purpose: "List projects ordered by update time.",
-  },
-  {
-    method: "POST",
-    path: "/api/projmgmt/projects",
-    purpose: "Create a project.",
-  },
-  {
-    method: "GET",
-    path: "/api/projmgmt/projects/{project_id}",
-    purpose: "Load one project.",
-  },
-  {
-    method: "PUT",
-    path: "/api/projmgmt/projects/{project_id}",
-    purpose: "Update a project name and description.",
-  },
-  {
-    method: "DELETE",
-    path: "/api/projmgmt/projects/{project_id}",
-    purpose: "Delete a project and its cards.",
-  },
-  {
-    method: "GET",
-    path: "/api/projmgmt/projects/{project_id}/cards",
-    purpose: "List cards for one project.",
-  },
-  {
-    method: "GET",
-    path: "/api/projmgmt/projects/{project_id}/issues",
-    purpose: "List server-side dependency and hierarchy schedule warnings for one project.",
-  },
-  {
-    method: "POST",
-    path: "/api/projmgmt/cards",
-    purpose: "Create an epic, feature, story, or subtask card.",
-  },
-  {
-    method: "GET",
-    path: "/api/projmgmt/cards/{card_id}",
-    purpose: "Load one card.",
-  },
-  {
-    method: "GET",
-    path: "/api/projmgmt/cards/{card_id}/activity",
-    purpose: "List tracked type, status, date, parent, and comment changes for one card.",
-  },
-  {
-    method: "PUT",
-    path: "/api/projmgmt/cards/{card_id}",
-    purpose: "Update a card; type changes shift descendant levels when hierarchy depth remains valid.",
-  },
-  {
-    method: "DELETE",
-    path: "/api/projmgmt/cards/{card_id}",
-    purpose: "Delete a card that has no child cards.",
-  },
-];
-
-function ApiReference() {
-  return (
-    <>
-      <header className="topbar api-topbar">
-        <div>
-          <div className="eyebrow">
-            <ClipboardList size={16} />
-            <span>API Reference</span>
-          </div>
-          <h1>Local API</h1>
-        </div>
-        <a className="secondary-button api-doc-link" href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">
-          Open Docs
-        </a>
-      </header>
-
-      <div className="api-reference-grid">
-        <section className="api-panel api-overview">
-          <h2>Development URLs</h2>
-          <dl>
-            <div>
-              <dt>API server</dt>
-              <dd>http://127.0.0.1:8000</dd>
-            </div>
-            <div>
-              <dt>OpenAPI JSON</dt>
-              <dd>/openapi.json</dd>
-            </div>
-            <div>
-              <dt>Interactive docs</dt>
-              <dd>/docs</dd>
-            </div>
-          </dl>
-        </section>
-
-        <ApiEndpointSection title="Planner" endpoints={plannerEndpoints} />
-        <ApiEndpointSection title="Project Manager" endpoints={projectEndpoints} />
-
-        <section className="api-panel">
-          <h2>Planner Entry</h2>
-          <CodeBlock
-            value={`{
-  "entry_date": "2026-05-17",
-  "priorities": ["Ship project views"],
-  "priority_card_ids": ["linked-card-id"],
-  "tasks": [
-    { "text": "Review API reference", "completed": false }
-  ],
-  "schedule": "09:00 Focus block",
-  "notes": "Anything useful from the day."
-}`}
-          />
-        </section>
-
-        <section className="api-panel">
-          <h2>Project Card</h2>
-          <CodeBlock
-            value={`{
-  "project_id": "project-id",
-  "card_type": "feature",
-  "title": "Timeline view",
-  "description": "Show scheduled work",
-  "comments": "## Notes\\n\\n\`\`\`mermaid\\ngraph TD\\nA-->B\\n\`\`\`",
-  "status": "in_progress",
-  "start_date": "2026-05-17",
-  "due_date": "2026-05-24",
-  "parent_id": "epic-id",
-  "dependency_ids": ["api-contract-card-id"],
-  "deliverables": ["Timeline", "Gantt"]
-}`}
-          />
-        </section>
-
-        <section className="api-panel">
-          <h2>Project Card Activity</h2>
-          <CodeBlock
-            value={`{
-  "id": "activity-id",
-  "project_id": "project-id",
-  "card_id": "card-id",
-  "field_name": "status",
-  "old_value": "backlog",
-  "new_value": "in_progress",
-  "created_at": "2026-05-18T14:30:00Z"
-}`}
-          />
-        </section>
-
-        <section className="api-panel">
-          <h2>Card Rules</h2>
-          <ul className="api-rule-list">
-            <li>Valid card types: epic, feature, story, subtask.</li>
-            <li>Valid statuses: backlog, in_progress, blocked, done.</li>
-            <li>Features must have an epic parent.</li>
-            <li>Stories must have a feature parent.</li>
-            <li>Subtasks must have a story parent.</li>
-            <li>Start date must be on or before due date.</li>
-            <li>Dependency cards must belong to the same project.</li>
-            <li>Dependency date conflicts are warnings and do not block saves.</li>
-            <li>Changing a card type shifts every descendant by the same number of levels.</li>
-            <li>Type changes are rejected when a descendant would move below subtask.</li>
-            <li>Cards with children cannot be deleted.</li>
-          </ul>
-        </section>
-      </div>
-    </>
-  );
-}
-
-function ApiEndpointSection({ endpoints, title }) {
-  return (
-    <section className="api-panel api-endpoints">
-      <h2>{title}</h2>
-      <div>
-        {endpoints.map((endpoint) => (
-          <article className="api-endpoint" key={`${endpoint.method}-${endpoint.path}`}>
-            <span className={`api-method ${endpoint.method.toLowerCase()}`}>{endpoint.method}</span>
-            <code>{endpoint.path}</code>
-            <p>{endpoint.purpose}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function CodeBlock({ value }) {
-  return <pre className="api-code"><code>{value}</code></pre>;
 }
 
 function ProjectSummaryBar({ issueCount, project, summary }) {
@@ -2269,8 +2053,10 @@ function groupIssuesByType(issueGroups, issueType) {
     .filter((group) => group.issues.length);
 }
 
-function ProjectIssues({ cards, onMoveCard, onOpenCard, onStartNewCard, project }) {
-  const issueGroups = projectIssuesForCards(cards);
+function ProjectIssues({ cards, issueRecords = [], onMoveCard, onOpenCard, onStartNewCard, project }) {
+  const issueGroups = issueRecords.length
+    ? issueGroupsFromIssueRecords(cards, issueRecords)
+    : projectIssuesForCards(cards);
   const blockedGroups = groupIssuesByType(issueGroups, "blocked_dependency");
   const dateConflictGroups = groupIssuesByType(issueGroups, "date_conflict");
   const hierarchyConflictGroups = groupIssuesByType(issueGroups, "hierarchy_date_conflict");
@@ -2354,8 +2140,8 @@ function IssueGroup({ actionLabel, groups, onAction, onOpenCard, title }) {
           </button>
           <ul>
             {issues.map((issue) => (
-              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>
-                <button type="button" onClick={() => onOpenCard(issue.dependency)}>
+              <li key={`${issue.type}-${issue.dependency?.id || card.id}-${issue.boundary || ""}`}>
+                <button type="button" onClick={() => onOpenCard(issue.dependency || card)}>
                   {issue.message}
                 </button>
               </li>
@@ -3055,8 +2841,8 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onOpenCard
           <h3>Issues</h3>
           <ul>
             {issues.map((issue) => (
-              <li key={`${issue.type}-${issue.dependency.id}-${issue.boundary || ""}`}>
-                <button type="button" onClick={() => onOpenCard(issue.dependency)}>
+              <li key={`${issue.type}-${issue.dependency?.id || card.id}-${issue.boundary || ""}`}>
+                <button type="button" onClick={() => onOpenCard(issue.dependency || card)}>
                   {issue.message}
                 </button>
               </li>
@@ -3663,15 +3449,6 @@ function MarkdownPreview({ value }) {
         <p className="empty-overview">No comments yet.</p>
       )}
     </section>
-  );
-}
-
-function StatusLine({ error, label }) {
-  return (
-    <div className={`status-line ${error ? "status-error" : ""}`}>
-      {error ? <AlertCircle size={16} /> : <Check size={16} />}
-      <span>{label}</span>
-    </div>
   );
 }
 

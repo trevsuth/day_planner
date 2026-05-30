@@ -34,30 +34,29 @@ Keep the application lightweight in day-to-day use:
 
 ## Refactoring
 
-1. Continue splitting React UI components by feature
-   - Move planner components into `web/src/planner/`.
-   - Move project management views and card editor components into `web/src/projects/`.
-   - Keep API reference and app shell separate from feature-level state.
+1. Continue splitting React project UI components by feature
+   - Move project management views into `web/src/projects/views/`.
+   - Move card editor, project editor, CSV panel, and shared project controls into `web/src/projects/`.
+   - Keep changes mechanical and behavior-preserving.
 
-2. Expand frontend domain tests
-   - Cover CSV parsing/import validation and planner-entry normalization.
-   - Add tests when extracted domain functions gain new behavior.
-   - Keep Playwright focused on workflow smoke coverage rather than every rule.
-
-3. Expand the Python service layer
-   - Move remaining shared planner save/load behavior into service calls where useful.
-   - Add service-level tests for project hierarchy and planner assignment behavior.
-   - Keep database modules focused on persistence.
-
-4. Use server-side issue results in the web UI
-   - Fetch `/api/projmgmt/projects/{project_id}/issues` alongside cards.
-   - Reconcile server issue records with the existing local issue badges.
-   - Keep local domain helpers for responsive previews, but avoid divergent warning behavior.
-
-5. Convert extracted frontend domain modules to TypeScript incrementally
-   - Start with `web/src/domain/planner.js` and `web/src/domain/csv.js`.
-   - Convert scheduling and card hierarchy logic after unit coverage is broad enough.
+2. Convert scheduling and card hierarchy domain logic to TypeScript
+   - Convert `web/src/domain/cards.js` once tests cover more edge cases.
+   - Preserve Node unit tests or convert them alongside the module.
    - Keep React components in JSX until feature modules are smaller.
+
+3. Use server-side issue records more broadly
+   - Feed server issue records into issue badges, preview panels, and dependency graph warnings.
+   - Keep local issue helpers only as a fallback for optimistic UI updates.
+   - Add an API smoke assertion for `/api/projmgmt/projects/{project_id}/issues`.
+
+4. Add service-level tests around API/TUI interoperability
+   - Cover TUI-facing project card creation/update service calls.
+   - Cover planner assignment behavior after project card deletion.
+   - Keep database tests separate from service behavior tests.
+
+5. Consider extracting markdown rendering
+   - Move markdown/Mermaid preview helpers out of `main.jsx`.
+   - Add focused tests for escaping, headings, lists, and fenced code blocks.
 
 ## Later
 
