@@ -22,6 +22,18 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Docker Compose hosting with per-machine persisted SQLite databases
 - Optional standalone executable build with PyInstaller
 
+## Screenshots
+
+![Planner day view](docs/screenshots/planner.png)
+
+![Project board](docs/screenshots/project-board.png)
+
+![Gantt chart](docs/screenshots/gantt.png)
+
+![Card editor](docs/screenshots/card-editor.png)
+
+![Keyboard shortcut reference](docs/screenshots/shortcuts.png)
+
 ## Quickstart
 
 ### Local Container Hosting
@@ -180,6 +192,14 @@ just web-test
 ```
 
 The frontend typecheck currently covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build the frontend, start an isolated local API server, and use temporary planner and project databases rather than your local application data.
+
+Capture README screenshots from isolated demo data:
+
+```bash
+just screenshots
+```
+
+Screenshots are written to `docs/screenshots/`.
 
 Continuous integration runs the same core checks on pushes to `main` and pull requests: Ruff, Python tests, frontend build, frontend typecheck, frontend unit tests, and the focused Playwright smoke tests with isolated databases.
 
@@ -358,6 +378,7 @@ Available `just` recipes:
 | `just web-typecheck` | Typecheck the TypeScript frontend foundation |
 | `just web-unit` | Run frontend domain unit tests |
 | `just web-test` | Run focused Playwright browser smoke tests using isolated databases |
+| `just screenshots` | Capture README screenshots from isolated demo data |
 | `just backup [file]` | Export local planner and project data to portable JSON |
 | `just restore [file]` | Replace local data from a portable JSON backup |
 | `just dev` | Run the API and React development servers together |

@@ -12,6 +12,10 @@ test:
 web-test:
     npm --prefix web run test:e2e
 
+# Capture README screenshots with isolated test databases
+screenshots:
+    npm --prefix web run screenshots
+
 # Run frontend domain unit tests
 web-unit:
     npm --prefix web run test:unit
