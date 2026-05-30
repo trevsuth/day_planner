@@ -289,6 +289,8 @@ The selected-card edit form updates as you move through cards with `F8` and `F9`
 
 Project manager web shortcuts:
 
+Open the in-app shortcut reference with the `Shortcuts` button in the top navigation or by pressing `?`.
+
 | Key | Action |
 | --- | --- |
 | `Alt+N` | Focus the new project field |

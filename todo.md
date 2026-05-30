@@ -21,11 +21,6 @@ Keep the application lightweight in day-to-day use:
    - Allow optional starter child cards.
    - Keep templates optional and out of the primary creation flow.
 
-3. Add a compact keyboard-shortcut reference
-   - Show web and TUI shortcuts from a small help panel.
-   - Keep it discoverable without adding persistent screen weight.
-   - Include project navigation, card editing, planner navigation, and assignment actions.
-
 ## Next
 
 1. Improve import validation and reporting

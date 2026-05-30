@@ -12,6 +12,7 @@ import {
   FileText,
   GitBranch,
   FolderKanban,
+  HelpCircle,
   Link2,
   ListChecks,
   Map as MapIcon,
@@ -82,6 +83,7 @@ import {
 } from "./domain/dates";
 import { compactEntry, normalizeEntry, plannerPriorityText } from "./domain/planner";
 import { IconButton, Section, StatusLine } from "./shared/components";
+import { ShortcutReference } from "./shortcuts/ShortcutReference";
 import "./styles.css";
 
 const PROJECT_STATE_STORAGE_KEY = "dailyPlanner.projectState";
@@ -180,6 +182,31 @@ function markdownToHtml(value = "") {
 function App() {
   const [activeTab, setActiveTab] = useState("planner");
   const [requestedCardId, setRequestedCardId] = useState("");
+  const [isShortcutReferenceOpen, setIsShortcutReferenceOpen] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      const target = event.target;
+      const isTyping =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement;
+
+      if (event.key === "Escape" && isShortcutReferenceOpen) {
+        event.preventDefault();
+        setIsShortcutReferenceOpen(false);
+        return;
+      }
+
+      if (!isTyping && !event.altKey && !event.ctrlKey && !event.metaKey && event.key === "?") {
+        event.preventDefault();
+        setIsShortcutReferenceOpen((current) => !current);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isShortcutReferenceOpen]);
 
   return (
     <main className="app-shell">
@@ -208,6 +235,16 @@ function App() {
           <ClipboardList size={18} />
           <span>API</span>
         </button>
+        <button
+          className="shortcut-help-button"
+          type="button"
+          onClick={() => setIsShortcutReferenceOpen(true)}
+          aria-label="Keyboard shortcuts"
+          title="Keyboard shortcuts (?)"
+        >
+          <HelpCircle size={18} />
+          <span>Shortcuts</span>
+        </button>
       </nav>
 
       {activeTab === "planner" ? (
@@ -225,6 +262,7 @@ function App() {
         />
       ) : null}
       {activeTab === "api" ? <ApiReference /> : null}
+      {isShortcutReferenceOpen ? <ShortcutReference onClose={() => setIsShortcutReferenceOpen(false)} /> : null}
     </main>
   );
 }

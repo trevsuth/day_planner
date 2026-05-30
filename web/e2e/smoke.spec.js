@@ -45,6 +45,12 @@ test("loads the planner, project manager, and API reference", async ({ page }) =
     .getByRole("button", { name: "API" })
     .click();
   await expect(page.getByRole("heading", { name: "Local API" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
+  await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+  await expect(page.getByText("Web Projects")).toBeVisible();
+  await page.getByLabel("Close shortcuts").click();
+  await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeHidden();
 });
 
 test("edits Gantt dates and surfaces derived schedule conflicts", async ({
