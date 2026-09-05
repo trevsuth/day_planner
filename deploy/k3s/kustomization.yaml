@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: daily-planner
+
+resources:
+  - namespace.yaml
+  - secret.yaml
+  - postgres.yaml
+  - app.yaml
+  - ingress.yaml
+  - backup-cronjob.yaml
+
+images:
+  - name: daily-planner
+    newName: registry.example.com/daily-planner
+    newTag: latest

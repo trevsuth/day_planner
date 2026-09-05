@@ -8,8 +8,8 @@ RUN npm run build
 
 FROM python:3.13-slim
 
-ENV PLANNER_DB_PATH=/data/planner.db \
-    PROJECT_MGMT_DB_PATH=/data/project_mgmt.db \
+ENV DATABASE_URL=postgresql://daily_planner:daily_planner@postgres:5432/daily_planner \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
@@ -21,8 +21,12 @@ COPY --from=web-build /build/web/dist ./web/dist
 
 RUN pip install --no-cache-dir \
   "fastapi>=0.111.0" \
+  "psycopg[binary]>=3.2.9" \
   "pydantic>=2.11.3" \
   "uvicorn>=0.29.0"
+
+RUN useradd --create-home --shell /usr/sbin/nologin appuser
+USER appuser
 
 EXPOSE 8000
 

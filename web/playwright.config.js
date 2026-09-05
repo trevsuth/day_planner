@@ -1,8 +1,10 @@
-import os from "node:os";
-import path from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
-const testDataDirectory = path.join(os.tmpdir(), `daily-planner-playwright-${process.pid}`);
+const databaseSchema = `playwright_${process.pid}`;
+const databaseUrl =
+  process.env.TEST_DATABASE_URL ||
+  process.env.DATABASE_URL ||
+  "postgresql://daily_planner:daily_planner@127.0.0.1:5432/daily_planner";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -25,8 +27,8 @@ export default defineConfig({
     command: "npm run build && uv run --project .. uvicorn app_planner.api:app --app-dir .. --host 127.0.0.1 --port 8180",
     env: {
       ...process.env,
-      PLANNER_DB_PATH: path.join(testDataDirectory, "planner.db"),
-      PROJECT_MGMT_DB_PATH: path.join(testDataDirectory, "project_mgmt.db"),
+      DATABASE_URL: databaseUrl,
+      DATABASE_SCHEMA: databaseSchema,
     },
     reuseExistingServer: false,
     timeout: 120_000,

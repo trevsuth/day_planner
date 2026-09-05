@@ -1,11 +1,14 @@
 from datetime import date
 
 import os
-import sqlite3
-import tempfile
+from uuid import uuid4
 
+import psycopg
 import pytest
+from psycopg import sql
+from psycopg.rows import dict_row
 
+from app_planner import database as planner_database
 from app_planner.database import (
     assign_card_priority,
     init_db,
@@ -25,16 +28,24 @@ from app_planner.services import (
 
 @pytest.fixture
 def temp_db(monkeypatch):
-    fd, path = tempfile.mkstemp()
-    os.close(fd)
+    database_url = os.environ.get("TEST_DATABASE_URL")
+    if not database_url:
+        pytest.skip("TEST_DATABASE_URL is required for Postgres database tests.")
+
+    schema = f"test_{uuid4().hex}"
+    with psycopg.connect(database_url, autocommit=True) as conn:
+        conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
 
     def _get_temp_connection():
-        return sqlite3.connect(path)
+        conn = psycopg.connect(database_url, row_factory=dict_row)
+        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
+        return conn
 
     monkeypatch.setattr("app_planner.database.get_connection", _get_temp_connection)
     init_db()
     yield
-    os.remove(path)
+    with psycopg.connect(database_url, autocommit=True) as conn:
+        conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
 
 
 def test_save_and_load_entry(temp_db):
@@ -62,47 +73,26 @@ def test_save_and_load_entry(temp_db):
     assert loaded.notes == entry.notes
 
 
-def test_init_db_records_planner_migration_for_existing_database(monkeypatch):
-    fd, path = tempfile.mkstemp()
-    os.close(fd)
-
-    with sqlite3.connect(path) as conn:
-        conn.execute("""
-            CREATE TABLE planner (
-                entry_date TEXT PRIMARY KEY,
-                priorities TEXT,
-                tasks TEXT,
-                schedule TEXT,
-                notes TEXT
-            )
-        """)
-        conn.execute(
-            """
-            INSERT INTO planner (entry_date, priorities, tasks, schedule, notes)
-            VALUES ('2026-05-18', '["Ship migration"]', '[]', '', 'Existing row')
-            """
-        )
-
-    def _get_temp_connection():
-        return sqlite3.connect(path)
-
-    monkeypatch.setattr("app_planner.database.get_connection", _get_temp_connection)
-    init_db()
-
-    with _get_temp_connection() as conn:
+def test_init_db_records_planner_migration(temp_db):
+    with planner_database.get_connection() as conn:
         migrations = conn.execute(
-            "SELECT version, name FROM schema_migrations ORDER BY version"
+            "SELECT version, name FROM planner_schema_migrations ORDER BY version"
         ).fetchall()
-        row = conn.execute(
-            "SELECT notes, priority_card_ids FROM planner WHERE entry_date = '2026-05-18'"
-        ).fetchone()
+        columns = {
+            row["column_name"]
+            for row in conn.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'planner'
+                """
+            ).fetchall()
+        }
 
-    assert migrations == [
-        (1, "create_planner"),
-        (2, "add_priority_card_links"),
-    ]
-    assert row == ("Existing row", "[]")
-    os.remove(path)
+    assert migrations == [{"version": 1, "name": "create_planner"}]
+    assert {"entry_date", "priorities", "priority_card_ids", "tasks"}.issubset(
+        columns
+    )
 
 
 def test_assigning_card_priority_moves_and_unlinks_card(temp_db):

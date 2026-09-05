@@ -8,8 +8,8 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Three daily priority fields
 - Five task fields with completion checkboxes
 - Previous/next day navigation
-- Local SQLite persistence in `planner.db`
-- Textual TUI and React web interfaces backed by the same SQLite databases
+- Postgres persistence for planner and project management data
+- Textual TUI and React web interfaces backed by the same Postgres database
 - Project management workspace with projects, epics, features, stories, subtasks, start dates, due dates, statuses, and deliverables
 - Card-level project hierarchy: epics contain features, features contain stories, and stories contain subtasks
 - Project cards with linked epics and quick epic creation
@@ -19,7 +19,7 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Card comments with Markdown preview and Mermaid/MMD fenced block support
 - Project deletion from the Projects sidebar
 - FastAPI JSON API for web access
-- Docker Compose hosting with per-machine persisted SQLite databases
+- Docker Compose hosting with a persisted Postgres database
 - Optional standalone executable build with PyInstaller
 
 ## Screenshots
@@ -65,7 +65,7 @@ Docker-specific shortcuts are also available:
 just docker-up
 ```
 
-Each computer gets its own databases in that computer's local named volume, `daily_planner_data`. The container stores planner data at `/data/planner.db` and project data at `/data/project_mgmt.db`. To stop the app while keeping the databases:
+Each computer gets its own Postgres database in that computer's local named volume, `daily_planner_postgres_data`. To stop the app while keeping the database:
 
 ```bash
 just host-down
@@ -78,7 +78,7 @@ just docker-down
 just podman-down
 ```
 
-To intentionally remove that computer's hosted databases, stop with the reset recipe:
+To intentionally remove that computer's hosted database, stop with the reset recipe:
 
 ```bash
 just host-reset
@@ -109,6 +109,7 @@ From the repository root:
 ```bash
 uv sync
 npm --prefix web install
+just db-up
 ```
 
 Run the web app:
@@ -131,9 +132,23 @@ To see all task shortcuts:
 just
 ```
 
+### k3s Deployment
+
+Kubernetes manifests for k3s live in `deploy/k3s`. They include the app deployment, Postgres StatefulSet, persisted storage, Traefik-compatible ingress, and a nightly `pg_dump` backup CronJob.
+
+Before deploying, set the real image, hostname, and database secret values in `deploy/k3s`, then apply the kustomize base:
+
+```bash
+just k3s-render
+just k3s-apply
+```
+
+Cluster-wide monitoring should be managed outside this repo. The app exposes `/api/health` as a DB-backed readiness/liveness endpoint for k3s probes and external blackbox checks.
+
 ## Requirements
 
 - Python 3.13 or newer
+- Postgres 17 or newer, or Docker/Podman Compose for the included Postgres service
 - [uv](https://docs.astral.sh/uv/) for dependency management
 - Node.js and npm for the React frontend
 - Optional: [just](https://github.com/casey/just) for the included task shortcuts
@@ -152,6 +167,12 @@ Install web dependencies:
 npm --prefix web install
 ```
 
+Start a local Postgres database:
+
+```bash
+just db-up
+```
+
 Run the TUI planner:
 
 ```bash
@@ -166,9 +187,13 @@ just dev
 
 Then open the Vite URL shown in the terminal, usually `http://127.0.0.1:5173`.
 
-The TUI and web planner both create or update `planner.db` in the directory where they are run. The TUI and web project manager both create or update `project_mgmt.db`. Set `PLANNER_DB_PATH` and `PROJECT_MGMT_DB_PATH` to override those paths.
+The TUI and web app both connect to Postgres through `DATABASE_URL`. Set `DATABASE_SCHEMA` to isolate tables into a named Postgres schema, which is useful for tests or multiple local environments. For local container hosting, Docker Compose starts Postgres and persists it in the local named volume `daily_planner_postgres_data`. Docker and Podman keep their own local volume stores, so each computer and container engine has separate data by default.
 
-For local container hosting, the app uses `/data/planner.db` and `/data/project_mgmt.db` inside the container and persists them in the local named volume `daily_planner_data`. Docker and Podman keep their own local volume stores, so each computer and container engine has separate data by default.
+To import existing SQLite data after starting Postgres:
+
+```bash
+just migrate-sqlite planner.db project_mgmt.db
+```
 
 List available task shortcuts:
 
@@ -182,6 +207,12 @@ Run the Python test suite:
 just test
 ```
 
+Database integration tests require Postgres. With the Compose database running, use:
+
+```bash
+just test-postgres
+```
+
 Run the focused browser smoke tests. Install Playwright's Chromium runtime once on each development machine:
 
 ```bash
@@ -191,7 +222,7 @@ just web-unit
 just web-test
 ```
 
-The frontend typecheck currently covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build the frontend, start an isolated local API server, and use temporary planner and project databases rather than your local application data.
+The frontend typecheck currently covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build the frontend, start an isolated local API server, and set `DATABASE_SCHEMA` so test tables stay separate from local application data.
 
 Capture README screenshots from isolated demo data:
 
@@ -201,7 +232,7 @@ just screenshots
 
 Screenshots are written to `docs/screenshots/`.
 
-Continuous integration runs the same core checks on pushes to `main` and pull requests: Ruff, Python tests, frontend build, frontend typecheck, frontend unit tests, and the focused Playwright smoke tests with isolated databases.
+Continuous integration runs the same core checks on pushes to `main` and pull requests: Ruff, Python tests, frontend build, frontend typecheck, frontend unit tests, and the focused Playwright smoke tests with isolated Postgres schemas.
 
 ## Backup And Restore
 
@@ -266,11 +297,13 @@ In the Projects tab, opening a project card shows linked epics and an inline fie
 
 Assigning a project card to a planner date creates a linked priority entry. Assigning the same card again moves that priority assignment to the new date. The card editor shows how many priority slots are already used for the selected date, warns when the day is full, and surfaces when multiple linked cards are already assigned to that date. In the web planner, the small linked-card control opens its project card and the adjacent unlink control removes the assignment.
 
+The Cards CSV panel exports the active project's cards, downloads a blank import template, and imports cards from CSV. Imports are validated before any cards are created: row-level errors are shown in the side panel for missing parents, unsupported types or statuses, invalid date ranges, duplicate imported card IDs, and unresolved dependencies. Parent and dependency links can reference existing or imported cards by ID, or by title when the title is unambiguous. If an API failure happens after card creation starts, the web app attempts to roll back the cards created by that import and reloads the project.
+
 Project hierarchy, dependency, and schedule-warning rules are implemented server-side in the project management service layer. The web UI keeps matching local domain helpers for responsive rendering, and the API exposes project issue results for clients that need the server as the source of truth.
 
 ## Platform Notes
 
-The current platform remains Python, FastAPI, SQLite, React, and Textual. This is intentional: it keeps the app lightweight, local-first, and easy to host per machine. Postgres, a different TUI framework, or a larger frontend framework should only be revisited if multi-user hosting, heavier concurrency, or blocked TUI workflows become real requirements.
+The current platform is Python, FastAPI, Postgres, React, and Textual. Postgres is used as the source-of-truth database so the hosted app can run cleanly on container platforms and keep room for multi-user or multi-device workflows later.
 
 ## Controls
 
@@ -375,12 +408,16 @@ Available `just` recipes:
 | --- | --- |
 | `just` | List all available recipes |
 | `just test` | Run the Python test suite |
+| `just test-postgres` | Run the full Postgres-backed Python test suite |
+| `just db-up` | Start only the local Postgres database for development |
+| `just db-down` | Stop the local Postgres database |
 | `just web-typecheck` | Typecheck the TypeScript frontend foundation |
 | `just web-unit` | Run frontend domain unit tests |
-| `just web-test` | Run focused Playwright browser smoke tests using isolated databases |
-| `just screenshots` | Capture README screenshots from isolated demo data |
+| `just web-test` | Run focused Playwright browser smoke tests using an isolated Postgres schema |
+| `just screenshots` | Capture README screenshots from isolated demo data in an isolated Postgres schema |
 | `just backup [file]` | Export local planner and project data to portable JSON |
 | `just restore [file]` | Replace local data from a portable JSON backup |
+| `just migrate-sqlite [planner_db] [project_db]` | Import existing SQLite databases into Postgres |
 | `just dev` | Run the API and React development servers together |
 | `just host-up` | Build and run the hosted container app using `CONTAINER_COMPOSE`, defaulting to Docker Compose |
 | `just host-down` | Stop the hosted container app |
@@ -388,6 +425,9 @@ Available `just` recipes:
 | `just host-build` | Build the hosted container image |
 | `just host-logs` | Follow hosted container logs |
 | `just host-ps` | Show hosted container status |
+| `just k3s-render` | Render the k3s manifests with kustomize |
+| `just k3s-apply` | Apply the k3s manifests |
+| `just k3s-status` | Show k3s deployment status |
 | `just host-backup [file]` | Export data from the running hosted container |
 | `just host-restore [file]` | Replace data in the running hosted container from backup |
 | `just docker-up` | Build and run the Docker Compose hosted app |
@@ -415,13 +455,13 @@ Available `just` recipes:
 ```text
 app_planner/
   api.py       FastAPI app, planner API, project routes, and static frontend serving
-  database.py  SQLite setup and persistence helpers
+  database.py  Postgres setup and persistence helpers
   models.py    Pydantic models for planner entries and tasks
   ui.css       Textual styles
   ui.py        Textual application and keyboard handling
 app_projmgmt/
   api.py       Project management API routes
-  database.py  SQLite setup and persistence helpers for projects and cards
+  database.py  Postgres setup and persistence helpers for projects and cards
   models.py    Pydantic models for projects, cards, statuses, and card types
 tests/
   test_database.py

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException
 
-from app_projmgmt.database import init_db
 from app_projmgmt.models import (
     Project,
     ProjectCard,
@@ -30,11 +29,6 @@ from app_projmgmt.services import (
 
 
 router = APIRouter(prefix="/api/projmgmt", tags=["project management"])
-
-
-@router.on_event("startup")
-def startup() -> None:
-    init_db()
 
 
 @router.get("/projects", response_model=list[Project])

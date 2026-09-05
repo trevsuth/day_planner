@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app_projmgmt.api import router as project_router
 from app_projmgmt.database import init_db as init_project_db
-from app_planner.database import init_db
+from app_planner.database import check_connection, init_db
 from app_planner.models import PlannerCardAssignment, PlannerEntry
 from app_planner.services import (
     PlannerNotFoundError,
@@ -23,7 +24,15 @@ from app_planner.services import (
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIST_DIR = BASE_DIR / "web" / "dist"
 
-app = FastAPI(title="Daily Planner API")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    init_db()
+    init_project_db()
+    yield
+
+
+app = FastAPI(title="Daily Planner API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,15 +47,16 @@ app.add_middleware(
 app.include_router(project_router)
 
 
-@app.on_event("startup")
-def startup() -> None:
-    init_db()
-    init_project_db()
-
-
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    try:
+        check_connection()
+    except Exception as error:
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection failed.",
+        ) from error
+    return {"status": "ok", "database": "ok"}
 
 
 @app.get("/api/planner/entries/{entry_date}", response_model=PlannerEntry)

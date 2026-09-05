@@ -1,4 +1,6 @@
 container_compose := env_var_or_default("CONTAINER_COMPOSE", "docker compose")
+database_url := env_var_or_default("DATABASE_URL", "postgresql://daily_planner:daily_planner@127.0.0.1:5432/daily_planner")
+test_database_url := env_var_or_default("TEST_DATABASE_URL", database_url)
 
 # List available recipes
 default:
@@ -6,13 +8,25 @@ default:
 
 # Run the test suite
 test:
-    pytest
+    uv run pytest
 
-# Run focused browser smoke tests with isolated test databases
+# Run the full Postgres-backed test suite
+test-postgres:
+    TEST_DATABASE_URL='{{test_database_url}}' uv run pytest
+
+# Start only the local Postgres database for development
+db-up:
+    {{container_compose}} up -d postgres
+
+# Stop the local Postgres database
+db-down:
+    {{container_compose}} stop postgres
+
+# Run focused browser smoke tests with an isolated Postgres schema
 web-test:
     npm --prefix web run test:e2e
 
-# Capture README screenshots with isolated test databases
+# Capture README screenshots with an isolated Postgres schema
 screenshots:
     npm --prefix web run screenshots
 
@@ -22,15 +36,19 @@ web-unit:
 
 # Export planner and project data to a portable JSON backup
 backup file="daily-planner-backup.json":
-    uv run python -m app_planner.backup export "{{file}}"
+    DATABASE_URL='{{database_url}}' uv run python -m app_planner.backup export "{{file}}"
 
 # Restore planner and project data from a portable JSON backup, replacing local data
 restore file="daily-planner-backup.json":
-    uv run python -m app_planner.backup restore "{{file}}"
+    DATABASE_URL='{{database_url}}' uv run python -m app_planner.backup restore "{{file}}"
+
+# Import existing SQLite databases into the configured Postgres database
+migrate-sqlite planner_db="planner.db" project_db="project_mgmt.db":
+    DATABASE_URL='{{database_url}}' uv run python -m app_planner.sqlite_migration --planner-db "{{planner_db}}" --project-db "{{project_db}}"
 
 # Run the API server for the React frontend
 api:
-    uv run uvicorn app_planner.api:app --reload
+    DATABASE_URL='{{database_url}}' uv run uvicorn app_planner.api:app --reload
 
 # Run the React development server
 web:
@@ -38,12 +56,13 @@ web:
 
 # Run the terminal planner
 tui:
-    uv run python -m app_planner.ui
+    DATABASE_URL='{{database_url}}' uv run python -m app_planner.ui
 
 # Run the API and React development servers together
 dev:
     #!/usr/bin/env bash
     set -euo pipefail
+    export DATABASE_URL='{{database_url}}'
     uv run uvicorn app_planner.api:app --reload &
     api_pid=$!
     npm --prefix web run dev &
@@ -79,6 +98,18 @@ host-logs:
 # Show hosted container status
 host-ps:
     {{container_compose}} ps
+
+# Render the k3s manifests with kustomize
+k3s-render:
+    kubectl kustomize deploy/k3s
+
+# Apply the k3s manifests
+k3s-apply:
+    kubectl apply -k deploy/k3s
+
+# Show k3s deployment status
+k3s-status:
+    kubectl -n daily-planner get ingress,pods,pvc,cronjob
 
 # Export hosted data to a portable JSON backup on this machine
 host-backup file="daily-planner-backup.json":

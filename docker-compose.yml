@@ -1,16 +1,33 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: daily_planner
+      POSTGRES_USER: daily_planner
+      POSTGRES_PASSWORD: daily_planner
+    volumes:
+      - daily_planner_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daily_planner -d daily_planner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   daily-planner:
     build:
       context: .
     image: daily-planner:local
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
-      PLANNER_DB_PATH: /data/planner.db
-      PROJECT_MGMT_DB_PATH: /data/project_mgmt.db
+      DATABASE_URL: postgresql://daily_planner:daily_planner@postgres:5432/daily_planner
     ports:
       - "${DAILY_PLANNER_PORT:-8080}:8000"
-    volumes:
-      - daily_planner_data:/data
     healthcheck:
       test:
         [
@@ -25,4 +42,4 @@ services:
       start_period: 10s
 
 volumes:
-  daily_planner_data:
+  daily_planner_postgres_data:
