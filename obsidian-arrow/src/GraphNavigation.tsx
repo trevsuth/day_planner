@@ -1,4 +1,4 @@
-import { CalendarDays, ClipboardList, FileText, FolderKanban, GitBranch } from "lucide-react";
+import { CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch } from "lucide-react";
 
 export default function GraphNavigation() {
   return (
@@ -7,6 +7,7 @@ export default function GraphNavigation() {
       <a href="/?view=projects"><FolderKanban size={18} aria-hidden="true" />Projects</a>
       <a href="/graph/" aria-current="page"><GitBranch size={18} aria-hidden="true" />Graph</a>
       <a href="/viewer/"><FileText size={18} aria-hidden="true" />Viewer</a>
+      <a href="/?view=validation"><ClipboardCheck size={18} aria-hidden="true" />Validation</a>
       <a href="/?view=api"><ClipboardList size={18} aria-hidden="true" />API</a>
     </nav>
   );

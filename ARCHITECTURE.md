@@ -27,6 +27,7 @@ flowchart LR
 | `obsidian-arrow/` | Independently buildable Graph editor. Hosted mode uses the suite API. Standalone mode retains its own storage adapters. |
 | `viewer/` | Browser-side Markdown and Mermaid rendering at `/viewer/`. Source files stay in the browser. |
 | `app_planner/`, `app_projmgmt/`, `app_graph/` | One FastAPI application. Routers handle HTTP, services enforce application rules, and persistence modules use SQL through psycopg. The Textual client shares Planner and Projects application code. |
+| `app_validation/` | Stateless document, character, and Python regex operations used by the web UI, API, and MCP. Python regex runs in a time-limited subprocess. |
 | `app_viewer/` | Stateless Markdown preview API and Mermaid source extraction for programmatic callers. |
 | `app_planner/mcp_server.py` | Optional stdio and loopback HTTP process that calls suite services directly. Tools are read-only by default. |
 | Nginx | Serves all hosted static bundles from one image. Compose also uses it as the same-origin API proxy. Independent frontend builds preserve local development workflows. |

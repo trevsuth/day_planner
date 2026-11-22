@@ -71,7 +71,7 @@ jobs:
         run: uv sync --locked
 
       - name: Lint Python
-        run: uv run --locked ruff check app_planner app_projmgmt app_graph app_viewer deploy/k3s tests
+        run: uv run --locked ruff check app_planner app_projmgmt app_graph app_viewer app_validation deploy/k3s tests
 
       - name: Run Python tests
         run: uv run --locked pytest

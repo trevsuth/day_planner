@@ -10,6 +10,7 @@ from app_planner.migrate import check_schema
 from app_planner.observability import RequestLogMiddleware
 from app_planner.routes import router as planner_router
 from app_projmgmt.api import router as project_router
+from app_validation.api import router as validation_router
 from app_viewer.api import router as viewer_router
 
 
@@ -37,6 +38,7 @@ app.include_router(planner_router)
 app.include_router(project_router)
 app.include_router(graph_router)
 app.include_router(viewer_router)
+app.include_router(validation_router)
 
 
 @app.get("/api/livez")

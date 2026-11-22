@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle } from "lucide-react";
+import { CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle } from "lucide-react";
 import { ApiReference } from "./api-reference/ApiReference";
 import { PlannerApp } from "./planner/PlannerApp";
 import { ProjectsApp } from "./projects/ProjectsApp";
 import { ShortcutReference } from "./shortcuts/ShortcutReference";
+import { ValidationApp } from "./validation/ValidationApp";
 import "./styles.css";
 
 const views = [
@@ -12,12 +13,13 @@ const views = [
   { id: "projects", href: "/?view=projects", label: "Projects", Icon: FolderKanban },
   { id: "graph", href: "/graph/", label: "Graph", Icon: GitBranch, separatePage: true },
   { id: "viewer", href: "/viewer/", label: "Viewer", Icon: FileText, separatePage: true },
+  { id: "validation", href: "/?view=validation", label: "Validation", Icon: ClipboardCheck },
   { id: "api", href: "/?view=api", label: "API", Icon: ClipboardList },
 ];
 
 function viewFromLocation() {
   const view = new URLSearchParams(window.location.search).get("view");
-  return view === "projects" || view === "api" ? view : "planner";
+  return ["projects", "validation", "api"].includes(view) ? view : "planner";
 }
 
 function App() {
@@ -107,6 +109,7 @@ function App() {
           onRequestedCardOpened={() => setRequestedCardId("")}
         />
       ) : null}
+      {activeTab === "validation" ? <ValidationApp /> : null}
       {activeTab === "api" ? <ApiReference /> : null}
       {isShortcutReferenceOpen ? <ShortcutReference onClose={() => setIsShortcutReferenceOpen(false)} /> : null}
     </main>

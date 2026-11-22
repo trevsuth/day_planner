@@ -3,6 +3,7 @@ import plannerIcon from "lucide-static/icons/calendar-days.svg?raw";
 import projectsIcon from "lucide-static/icons/folder-kanban.svg?raw";
 import graphIcon from "lucide-static/icons/git-branch.svg?raw";
 import viewerIcon from "lucide-static/icons/file-text.svg?raw";
+import validationIcon from "lucide-static/icons/clipboard-check.svg?raw";
 import apiIcon from "lucide-static/icons/clipboard-list.svg?raw";
 import fileIcon from "lucide-static/icons/folder-open.svg?raw";
 import sourceIcon from "lucide-static/icons/square-pen.svg?raw";
@@ -21,6 +22,7 @@ const icons = {
   projects: projectsIcon,
   graph: graphIcon,
   viewer: viewerIcon,
+  validation: validationIcon,
   api: apiIcon,
   file: fileIcon,
   source: sourceIcon,

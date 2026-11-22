@@ -267,7 +267,8 @@ Continuous integration runs the same core checks on pushes to `main` and pull re
 ## APIs and MCP
 
 Open the suite's API Reference for Planner, Projects, Graph, and Viewer
-endpoints. See the [MCP guide](docs/mcp.md) for local clients and ChatGPT
+endpoints. The [Validation tool](docs/validation.md) also exposes document,
+character, and Python regex operations over HTTP and MCP. See the [MCP guide](docs/mcp.md) for local clients and ChatGPT
 connection options.
 
 ## Backup And Restore

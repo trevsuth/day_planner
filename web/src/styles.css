@@ -3063,3 +3063,91 @@ textarea {
     padding: 14px;
   }
 }
+
+.validation {
+  max-width: 72rem;
+  margin: 1rem auto;
+  display: grid;
+  gap: 1rem;
+}
+
+.validation h1 {
+  margin: 0;
+}
+
+.validation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.validation-controls [aria-pressed="true"] {
+  outline: 2px solid currentColor;
+  outline-offset: -3px;
+}
+
+.validation-editor,
+.validation-regex,
+.validation-output {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.validation textarea,
+.validation pre,
+.validation code {
+  font-family: ui-monospace, monospace;
+}
+
+.validation textarea {
+  width: 100%;
+  min-height: 11rem;
+  padding: 0.7rem;
+  resize: vertical;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 0.4rem;
+}
+
+.validation textarea.validation-pattern {
+  min-height: 4rem;
+}
+
+.validation-regex > button {
+  justify-self: start;
+}
+
+.validation-error {
+  border-inline-start: 3px solid #da654e;
+  padding-inline-start: 0.75rem;
+}
+
+.validation-highlight,
+.validation-error pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.validation-highlight mark {
+  background: #ffd36a;
+  color: #1b1b1b;
+}
+
+.validation-findings {
+  max-height: 24rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.validation-findings li {
+  margin-block: 0.35rem;
+}
+
+.validation-tool:not([hidden]) {
+  display: grid;
+  gap: 1rem;
+}

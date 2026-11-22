@@ -19,6 +19,17 @@ from app_projmgmt.services import (
     list_all_projects,
     list_project_cards,
 )
+from app_validation.characters import scan_characters
+from app_validation.documents import process_document
+from app_validation.models import (
+    CharacterRequest,
+    CharacterResult,
+    DocumentRequest,
+    DocumentResult,
+    RegexRequest,
+    RegexResult,
+)
+from app_validation.regex import run_python_regex
 from app_viewer.preview import Preview, PreviewRequest, preview_document
 
 
@@ -106,6 +117,24 @@ def get_graph_connections(
 def preview_viewer_document(request: PreviewRequest) -> Preview:
     """Prepare Markdown HTML and Mermaid source without saving or fetching content."""
     return preview_document(request)
+
+
+@server.tool(annotations=READ_ONLY)
+def validate_document(request: DocumentRequest) -> DocumentResult:
+    """Check JSON, XML, YAML, or TOML syntax and optionally pretty-print it."""
+    return process_document(request)
+
+
+@server.tool(annotations=READ_ONLY)
+def inspect_invisible_characters(request: CharacterRequest) -> CharacterResult:
+    """Find invisible characters and optionally return text with selected offsets removed."""
+    return scan_characters(request)
+
+
+@server.tool(annotations=READ_ONLY)
+def find_python_regex_matches(request: RegexRequest) -> RegexResult:
+    """Match a Python regex with a timeout, returning code-point spans and captures."""
+    return run_python_regex(request)
 
 
 def create_project_card(card: ProjectCardCreate) -> ProjectCard:
