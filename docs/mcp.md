@@ -31,6 +31,9 @@ environment if the default local Compose database is unsuitable.
 | `get_graph_node` | Reads one node and its attachment metadata. |
 | `get_graph_connections` | Reads a node's incoming and outgoing relationships. |
 | `preview_viewer_document` | Renders Markdown HTML and extracts Mermaid source in memory. |
+| `validate_document` | Checks and optionally formats JSON, XML, YAML, and TOML. |
+| `inspect_invisible_characters` | Reports invisible characters and previews selected removals. |
+| `find_python_regex_matches` | Runs a bounded Python regex and returns match and capture spans. |
 
 To opt into writes, set `DAY_PLANNER_MCP_WRITES=1` in the MCP process
 environment. It adds `create_project_card` and `assign_card_to_planner`.

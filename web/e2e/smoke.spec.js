@@ -403,3 +403,41 @@ test("assigns a project card to a future planner priority", async ({
   await page.getByLabel("Remove card assignment").click();
   await expect(page.locator(".priority-row input").first()).toHaveValue("");
 });
+
+test("validates files, previews invisible-character removal, and highlights both regex dialects", async ({ page }) => {
+  await page.goto("/?view=validation");
+  const tool = () => page.locator(".validation-tool:visible");
+  const source = () => tool().getByLabel("Source text");
+
+  await source().fill('{\n  "x":\n}');
+  await tool().getByRole("button", { name: "Validate", exact: true }).click();
+  await expect(tool().getByRole("alert")).toContainText("Line 3, column 1");
+  await tool().getByLabel("Open UTF-8 text file").setInputFiles({
+    name: "test.toml", mimeType: "text/plain", buffer: Buffer.from("port=123 # keep\n"),
+  });
+  await expect(tool().getByLabel("Format", { exact: true })).toHaveValue("toml");
+  await tool().getByRole("button", { name: "Format document" }).click();
+  await expect(tool().getByLabel("Formatted output")).toHaveValue("port = 123 # keep\n");
+
+  await page.getByRole("button", { name: "Invisible Characters", exact: true }).click();
+  await source().fill("hello\u200b world");
+  await tool().getByRole("button", { name: "Show invisible characters" }).click();
+  await expect(tool().getByText("U+200B", { exact: true })).toBeVisible();
+  await tool().getByRole("checkbox").check();
+  await tool().getByRole("button", { name: "Preview removal" }).click();
+  await expect(tool().getByLabel("Cleaned preview")).toHaveValue("hello world");
+  await expect(source()).toHaveValue("hello\u200b world");
+
+  await page.getByRole("button", { name: "Regex Playground", exact: true }).click();
+  await expect(tool().getByLabel("Regex dialect")).toHaveValue("python");
+  await source().fill("🙂 dog cat DOG");
+  await tool().getByLabel("Pattern").fill("(?P<pet>dog)");
+  await tool().getByLabel("Flags").fill("i");
+  await tool().getByRole("button", { name: "Find matches" }).click();
+  await expect(tool().locator("mark")).toHaveText(["dog", "DOG"]);
+
+  await tool().getByLabel("Regex dialect").selectOption("javascript");
+  await tool().getByLabel("Pattern").fill("(?<pet>cat)");
+  await tool().getByRole("button", { name: "Find matches" }).click();
+  await expect(tool().locator("mark")).toHaveText(["cat"]);
+});

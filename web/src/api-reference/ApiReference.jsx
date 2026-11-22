@@ -106,6 +106,12 @@ const viewerEndpoints = [
   { method: "POST", path: "/api/viewer/preview", purpose: "Convert Markdown to HTML and extract Mermaid source. The browser can render the returned diagrams." },
 ];
 
+const validationEndpoints = [
+  { method: "POST", path: "/api/validation/document", purpose: "Validate JSON, XML, YAML, or TOML and optionally return formatted text." },
+  { method: "POST", path: "/api/validation/characters", purpose: "Find invisible characters and optionally remove selected offsets." },
+  { method: "POST", path: "/api/validation/regex", purpose: "Find matches and capture groups using Python regex." },
+];
+
 export function ApiReference() {
   return (
     <>
@@ -145,6 +151,7 @@ export function ApiReference() {
         <ApiEndpointSection title="Project Manager" endpoints={projectEndpoints} />
         <ApiEndpointSection title="Graph" endpoints={graphEndpoints} />
         <ApiEndpointSection title="Viewer" endpoints={viewerEndpoints} />
+        <ApiEndpointSection title="Validation" endpoints={validationEndpoints} />
 
         <section className="api-panel">
           <h2>Planner Entry</h2>

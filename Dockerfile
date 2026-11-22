@@ -40,6 +40,7 @@ COPY app_planner ./app_planner
 COPY app_projmgmt ./app_projmgmt
 COPY app_graph ./app_graph
 COPY app_viewer ./app_viewer
+COPY app_validation ./app_validation
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser
 USER appuser
