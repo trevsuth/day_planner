@@ -7,7 +7,8 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The locked Playwright browser supports Ubuntu 24.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -61,7 +62,7 @@ jobs:
           npm --prefix viewer run build
 
       - name: Install Playwright browser
-        run: npm --prefix web exec playwright install --with-deps chromium
+        run: npm --prefix web exec -- playwright install --with-deps chromium
 
       - name: Lint Python
         run: uv run ruff check app_planner app_projmgmt app_graph tests
