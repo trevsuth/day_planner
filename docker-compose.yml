@@ -41,5 +41,13 @@ services:
       retries: 3
       start_period: 10s
 
+  obsidian-arrow:
+    build:
+      context: ./obsidian-arrow
+    image: arrowsapp:local
+    ports:
+      - "${ARROWSAPP_PORT:-8081}:80"
+    restart: unless-stopped
+
 volumes:
   daily_planner_postgres_data:

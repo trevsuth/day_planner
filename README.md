@@ -45,7 +45,13 @@ cp .env.example .env
 just host-up
 ```
 
-Open `http://localhost:8080`.
+Open Daily Planner at `http://localhost:8080` and Obsidian Arrow at
+`http://localhost:8081`. Set `ARROWSAPP_PORT` in `.env` to change Obsidian
+Arrow's host port. Obsidian Arrow stores graph data and attachments in each
+browser profile. JSON export and import move graph data and attachment metadata
+between devices. Attachment files stay in the browser where they were added.
+See the [Obsidian Arrow README](obsidian-arrow/README.md) for standalone setup
+and development commands.
 
 `just host-up` uses Docker Compose by default. To use Podman Compose instead:
 
@@ -87,7 +93,7 @@ just host-reset
 Change the host port by editing `.env`:
 
 ```bash
-DAILY_PLANNER_PORT=8081
+DAILY_PLANNER_PORT=8082
 ```
 
 Without `just`, run the compose tool directly:
