@@ -16,13 +16,6 @@ spec:
                 name: daily-planner-api
                 port:
                   number: 8000
-          - path: /viewer
-            pathType: Prefix
-            backend:
-              service:
-                name: markdown-viewer
-                port:
-                  number: 8080
           - path: /
             pathType: Prefix
             backend:

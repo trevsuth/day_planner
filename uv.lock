@@ -1,5 +1,5 @@
 version = 1
-revision = 1
+revision = 5
 requires-python = ">=3.13"
 
 [[package]]
@@ -75,16 +75,19 @@ wheels = [
 name = "daily-planner"
 version = "0.1.0"
 source = { virtual = "." }
+default-groups = ["desktop", "dev"]
 dependencies = [
     { name = "fastapi" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
-    { name = "pyinstaller" },
-    { name = "textual" },
     { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
+desktop = [
+    { name = "pyinstaller" },
+    { name = "textual" },
+]
 dev = [
     { name = "httpx" },
     { name = "pytest" },
@@ -96,12 +99,14 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.111.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.9" },
     { name = "pydantic", specifier = ">=2.11.3" },
-    { name = "pyinstaller", specifier = ">=6.13.0" },
-    { name = "textual", specifier = ">=3.1.0" },
     { name = "uvicorn", specifier = ">=0.29.0" },
 ]
 
 [package.metadata.requires-dev]
+desktop = [
+    { name = "pyinstaller", specifier = ">=6.13.0" },
+    { name = "textual", specifier = ">=3.1.0" },
+]
 dev = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.3.5" },

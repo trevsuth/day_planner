@@ -11,9 +11,6 @@ images:
   - name: daily-planner-api
     newName: registry.example.com/daily-planner-api
     newTag: YOUR_RELEASE_TAG
-  - name: markdown-viewer
-    newName: registry.example.com/markdown-viewer
-    newTag: YOUR_RELEASE_TAG
 
 patches:
   - target:

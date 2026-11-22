@@ -41,9 +41,6 @@ jobs:
 
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
-        with:
-          version: v1.34.1
 
       - name: Publish multi-architecture images
         env:
@@ -51,24 +48,19 @@ jobs:
         run: |
           printf '%s\n' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           registry="ghcr.io/${GITHUB_REPOSITORY,,}"
-          for target in web api viewer; do
+          notes="$RUNNER_TEMP/release-notes.md"
+          printf 'Deploy using the Kustomize overlay from source tag `%s`.\n\n' "$RELEASE_TAG" > "$notes"
+          for target in web api; do
             image="$registry-$target"
             docker buildx build --target "$target" --platform linux/amd64,linux/arm64 \
               --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
               --label "org.opencontainers.image.revision=$GITHUB_SHA" \
               --tag "$image:$RELEASE_TAG" --metadata-file "$RUNNER_TEMP/$target.json" --push .
             digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/$target.json")
-            printf '%s\n' "$image@$digest" > "$RUNNER_TEMP/$target.image"
+            printf -- '- %s image `%s@%s`\n' "$target" "$image" "$digest" >> "$notes"
           done
-
-      - name: Package deployment overlay
-        run: |
-          python3 deploy/k3s/package-release.py "$RELEASE_TAG" "$RUNNER_TEMP" \
-            "$(cat "$RUNNER_TEMP/web.image")" "$(cat "$RUNNER_TEMP/api.image")" \
-            "$(cat "$RUNNER_TEMP/viewer.image")"
 
       - name: Publish GitHub release
         run: |
-          artifact="day-planner-k3s-$RELEASE_TAG.tar.gz"
-          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/$artifact" "$RUNNER_TEMP/$artifact.sha256" \
-            --verify-tag --generate-notes
+          gh release create "$RELEASE_TAG" --verify-tag \
+            --notes-file "$RUNNER_TEMP/release-notes.md"

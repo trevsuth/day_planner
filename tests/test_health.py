@@ -6,11 +6,11 @@ from app_planner import api
 def test_health_checks_database(monkeypatch):
     called = False
 
-    def check_connection():
+    def check_schema():
         nonlocal called
         called = True
 
-    monkeypatch.setattr(api, "check_connection", check_connection)
+    monkeypatch.setattr(api, "check_schema", check_schema)
 
     response = TestClient(api.app).get("/api/health")
 
@@ -20,10 +20,10 @@ def test_health_checks_database(monkeypatch):
 
 
 def test_health_returns_503_when_database_is_unavailable(monkeypatch):
-    def check_connection():
+    def check_schema():
         raise RuntimeError("database unavailable")
 
-    monkeypatch.setattr(api, "check_connection", check_connection)
+    monkeypatch.setattr(api, "check_schema", check_schema)
 
     response = TestClient(api.app).get("/api/health")
 
@@ -32,10 +32,10 @@ def test_health_returns_503_when_database_is_unavailable(monkeypatch):
 
 
 def test_liveness_stays_available_when_database_is_unreachable(monkeypatch):
-    def check_connection():
+    def check_schema():
         raise RuntimeError("database unavailable")
 
-    monkeypatch.setattr(api, "check_connection", check_connection)
+    monkeypatch.setattr(api, "check_schema", check_schema)
 
     response = TestClient(api.app).get("/api/livez")
 

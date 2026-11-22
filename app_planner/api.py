@@ -1,4 +1,3 @@
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -7,12 +6,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app_graph.api import router as graph_router
-from app_graph.database import init_db as init_graph_db
-from app_projmgmt.api import router as project_router
-from app_projmgmt.database import init_db as init_project_db
-from app_planner.database import check_connection, init_db
+from app_planner.migrate import check_schema
 from app_planner.observability import RequestLogMiddleware
 from app_planner.routes import router as planner_router
+from app_projmgmt.api import router as project_router
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,15 +18,7 @@ GRAPH_DIST_DIR = BASE_DIR / "obsidian-arrow" / "dist-hosted"
 VIEWER_DIST_DIR = BASE_DIR / "viewer" / "dist"
 
 
-@asynccontextmanager
-async def lifespan(_: FastAPI):
-    init_db()
-    init_project_db()
-    init_graph_db()
-    yield
-
-
-app = FastAPI(title="Daily Planner API", lifespan=lifespan)
+app = FastAPI(title="Daily Planner API")
 
 app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
@@ -56,7 +45,7 @@ def live() -> dict[str, str]:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     try:
-        check_connection()
+        check_schema()
     except Exception as error:
         raise HTTPException(
             status_code=503,

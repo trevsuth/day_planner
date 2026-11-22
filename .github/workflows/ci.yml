@@ -21,7 +21,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U daily_planner -d daily_planner"
+          --health-cmd "pg_isready -h 127.0.0.1 -U daily_planner -d daily_planner"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -35,6 +35,8 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+        with:
+          version: '0.13.8'
 
       - name: Set up Python
         run: uv python install 3.13
@@ -65,11 +67,14 @@ jobs:
       - name: Install Playwright browser
         run: npm --prefix web exec -- playwright install --with-deps chromium
 
+      - name: Install locked Python dependencies
+        run: uv sync --locked
+
       - name: Lint Python
-        run: uv run ruff check app_planner app_projmgmt app_graph deploy/k3s tests
+        run: uv run --locked ruff check app_planner app_projmgmt app_graph deploy/k3s tests
 
       - name: Run Python tests
-        run: uv run pytest
+        run: uv run --locked pytest
 
       - name: Build frontend
         run: npm --prefix web run build
@@ -83,7 +88,7 @@ jobs:
       - name: Run browser smoke tests
         run: npm --prefix web run test:e2e
 
-  deployment-package:
+  manifests:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -91,10 +96,35 @@ jobs:
       - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
         with:
           version: v1.34.1
-      - name: Render and verify a sample release archive
+      - name: Install manifest validators
         run: |
-          digest="sha256:$(printf '%064d' 0)"
-          python3 deploy/k3s/package-release.py v0.0.0 "$RUNNER_TEMP" \
-            "ghcr.io/example/web@$digest" "ghcr.io/example/api@$digest" "ghcr.io/example/viewer@$digest"
-          cd "$RUNNER_TEMP"
-          sha256sum -c day-planner-k3s-v0.0.0.tar.gz.sha256
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.45.4/yq_linux_amd64 -o "$RUNNER_TEMP/bin/yq"
+          chmod +x "$RUNNER_TEMP/bin/yq"
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz |
+            tar -xz -C "$RUNNER_TEMP/bin" kubeconform
+          printf '%s\n' "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Validate HTTP and TLS overlays
+        run: |
+          cp -R deploy "$RUNNER_TEMP/deploy"
+          overlay="$RUNNER_TEMP/deploy/k3s-overlays/example"
+          manifest="$RUNNER_TEMP/manifest.yaml"
+
+          kubectl kustomize "$overlay" > "$manifest"
+          if bash deploy/k3s/check-rendered.sh "$manifest"; then
+            printf '%s\n' 'The example template must fail deployment checks before configuration.' >&2
+            exit 1
+          fi
+
+          sed -i 's|registry.example.com|ghcr.io/day-planner-ci|g; s|YOUR_RELEASE_TAG|v0.0.0|g; s|planner.example.com|planner.home.test|g' \
+            "$overlay/kustomization.yaml" "$overlay/ingress-https.yaml"
+          kubectl kustomize "$overlay" > "$manifest"
+          bash deploy/k3s/check-rendered.sh "$manifest"
+          kubeconform -strict -summary -kubernetes-version 1.34.0 "$manifest"
+
+          sed -i 's|# - path: ingress-https.yaml|- path: ingress-https.yaml|' "$overlay/kustomization.yaml"
+          export SAMPLE_DIGEST="sha256:$(printf '%064d' 0)"
+          yq -i '.images[] |= (del(.newTag) | .digest = strenv(SAMPLE_DIGEST))' "$overlay/kustomization.yaml"
+          kubectl kustomize "$overlay" > "$manifest"
+          bash deploy/k3s/check-rendered.sh "$manifest"
+          kubeconform -strict -summary -kubernetes-version 1.34.0 "$manifest"

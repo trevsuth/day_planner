@@ -7,8 +7,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, Container
 from textual.widgets import Label, Static, Input, TextArea, Checkbox
 from app_planner.models import PlannerEntry, Task
-from app_planner.database import load_entry, save_entry, init_db
-from app_projmgmt.database import init_db as init_project_db
+from app_planner.database import load_entry, save_entry
 from app_projmgmt.models import (
     CardStatus,
     CardType,
@@ -25,8 +24,6 @@ from app_projmgmt.services import (
     update_existing_card,
 )
 
-init_db()
-init_project_db()
 
 
 CARD_TYPE_LABELS = {

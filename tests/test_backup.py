@@ -1,25 +1,17 @@
 from datetime import date
-import os
 import json
 import sqlite3
 from pathlib import Path
-from uuid import uuid4
 
-import psycopg
-import pytest
-from psycopg import sql
-from psycopg.rows import dict_row
 
 from app_planner.backup import restore_backup, write_backup
 from app_planner.sqlite_migration import migrate_sqlite_to_postgres
-from app_planner.database import init_db as init_planner_db
 from app_planner.database import list_entries, save_entry
 from app_planner.models import PlannerEntry
 from app_projmgmt.database import (
     create_card,
     create_project,
     get_card,
-    init_db as init_project_db,
     list_card_activity,
     list_projects,
     update_card,
@@ -27,31 +19,7 @@ from app_projmgmt.database import (
 from app_projmgmt.models import CardStatus, CardType, ProjectCardCreate, ProjectCreate
 
 
-@pytest.fixture
-def temp_db(monkeypatch):
-    database_url = os.environ.get("TEST_DATABASE_URL")
-    if not database_url:
-        pytest.skip("TEST_DATABASE_URL is required for Postgres database tests.")
-
-    schema = f"test_{uuid4().hex}"
-    with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
-
-    def _get_temp_connection():
-        conn = psycopg.connect(database_url, row_factory=dict_row)
-        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
-        return conn
-
-    monkeypatch.setattr("app_planner.database.get_connection", _get_temp_connection)
-    monkeypatch.setattr("app_projmgmt.database.get_connection", _get_temp_connection)
-    yield
-    with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
-
-
 def test_backup_round_trip_restores_planner_and_project_data(temp_db, tmp_path):
-    init_planner_db()
-    init_project_db()
 
     project = create_project(ProjectCreate(name="Portable project"))
     card = create_card(
