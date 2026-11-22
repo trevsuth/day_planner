@@ -478,6 +478,7 @@ Available `just` recipes:
 | `just k3s-apply CONTEXT [overlay]` | Validate and apply the configured overlay |
 | `just k3s-smoke URL` | Verify the web and API routes through ingress |
 | `just k3s-backup CONTEXT FILE` | Stream a full Postgres archive to a new local file |
+| `just k3s-backup-status CONTEXT [max_age_hours]` | Check scheduled backup success and freshness |
 | `just k3s-status CONTEXT` | Show k3s deployment status |
 | `just host-backup [file]` | Export hosted Planner and Projects data to JSON |
 | `just host-restore [file]` | Replace hosted Planner and Projects data from JSON |

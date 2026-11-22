@@ -8,12 +8,17 @@ const maxRequestBytes = 24 * 1024 * 1024;
 async function responseError(response: Response): Promise<Error> {
   const fallback = `Graph request failed (${response.status}).`;
   const result = await response.json().catch(() => null);
-  return new Error(typeof result?.detail === "string" ? result.detail : fallback);
+  return requestError(response, typeof result?.detail === "string" ? result.detail : fallback);
+}
+
+function requestError(response: Response, message: string): Error {
+  const requestId = response.headers.get("X-Request-ID");
+  return new Error(requestId ? `${message} Request ID: ${requestId}` : message);
 }
 
 export class HostedGraphStorage {
   private readonly pending = new Map<string, Blob>();
-  private conflict = false;
+  private conflict: Error | null = null;
 
   private constructor(private revision: number) {}
 
@@ -58,7 +63,7 @@ export class HostedGraphStorage {
 
   async save(document: GraphDocument) {
     if (this.conflict) {
-      throw new Error("The graph changed in another browser. Export a backup of your edits, then reload.");
+      throw this.conflict;
     }
     const files: Record<string, string> = Object.create(null);
     for (const { storageKey } of document.nodes.flatMap((node) => node.attachments)) {
@@ -76,8 +81,8 @@ export class HostedGraphStorage {
       body,
     });
     if (response.status === 409) {
-      this.conflict = true;
-      throw new Error("The graph changed in another browser. Export a backup of your edits, then reload.");
+      this.conflict = requestError(response, "The graph changed in another browser. Export a backup of your edits, then reload.");
+      throw this.conflict;
     }
     if (!response.ok) throw await responseError(response);
     this.revision = (await response.json()).revision;

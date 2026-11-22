@@ -81,6 +81,7 @@ test("shares Graph and its files across browsers and restores a portable backup"
     await page.locator(".document-actions summary").click();
     await page.getByRole("textbox", { name: "Graph title" }).fill("Stale edit");
     await expect(page.getByRole("alert")).toContainText("The graph changed in another browser");
+    await expect(page.getByRole("alert")).toContainText(/Request ID: [a-zA-Z0-9_-]+/);
     await freshPage.reload();
     await expect(freshPage.getByRole("heading", { level: 1 })).toHaveText("Local Graph Wiki");
   } finally {

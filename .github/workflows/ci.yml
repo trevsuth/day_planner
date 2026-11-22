@@ -66,7 +66,7 @@ jobs:
         run: npm --prefix web exec -- playwright install --with-deps chromium
 
       - name: Lint Python
-        run: uv run ruff check app_planner app_projmgmt app_graph deploy/k3s/package-release.py tests
+        run: uv run ruff check app_planner app_projmgmt app_graph deploy/k3s tests
 
       - name: Run Python tests
         run: uv run pytest

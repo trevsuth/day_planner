@@ -183,3 +183,32 @@ rollback using a disposable namespace or cluster and sample data.
 Use `/api/health` for database readiness and external checks. The API's
 liveness endpoint, `/api/livez`, stays available during a temporary database
 outage so Kubernetes can pause traffic without restarting the API.
+
+## Diagnose a failed request
+
+API responses carry an `X-Request-ID` header. Hosted Graph shows the ID when a
+save fails after the server responds. Use it to find the JSON completion log:
+
+```bash
+kubectl --context "$K3S_CONTEXT" -n daily-planner logs deployment/daily-planner-api --since=30m | grep -F "$REQUEST_ID"
+```
+
+The API records the route template, status, and elapsed milliseconds. Its
+completion logs omit query strings, request bodies, and exception messages. A
+healthy probe is omitted to reduce noise. Compose's Nginx access records use
+the same request ID and report a route group and upstream timing. For k3s
+requests routed directly to the API, configure Traefik access logging to
+record the `X-Request-ID` response header if you also need an ingress record.
+
+## Monitor backups
+
+Run `just k3s-backup-status "$K3S_CONTEXT"` from your monitor or scheduler.
+It returns a JSON status and exits nonzero if the scheduled job failed after
+its last success, has never succeeded, is suspended, or is more than 26 hours
+old. The optional second argument overrides the age threshold in hours. Wire a
+nonzero exit to your alert destination.
+
+The nightly job and `just k3s-backup` emit separate `postgres_backup` JSON
+events. Filter on `scope=scheduled` for the CronJob and `scope=off_node` for
+exports. Both include the result, duration, and bytes written. Monitor your
+off-node scheduler's result and the age of its latest archive separately.
