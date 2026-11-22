@@ -71,7 +71,7 @@ migrate-sqlite planner_db="planner.db" project_db="project_mgmt.db":
 
 # Run the API server for the React frontend
 api:
-    DATABASE_URL='{{database_url}}' uv run uvicorn app_planner.api:app --reload
+    DATABASE_URL='{{database_url}}' uv run uvicorn app_planner.api:app --reload --no-access-log
 
 # Run the React development server
 web:
@@ -86,7 +86,7 @@ dev: graph-build viewer-build
     #!/usr/bin/env bash
     set -euo pipefail
     export DATABASE_URL={{quote(database_url)}}
-    uv run uvicorn app_planner.api:app --reload &
+    uv run uvicorn app_planner.api:app --reload --no-access-log &
     api_pid=$!
     (cd web && exec node node_modules/vite/bin/vite.js --host 127.0.0.1) &
     web_pid=$!
@@ -179,6 +179,10 @@ k3s-smoke url:
 # Export a complete Postgres backup from k3s to a new local file
 k3s-backup context file:
     bash deploy/k3s/backup.sh {{quote(context)}} {{quote(file)}}
+
+# Fail if the scheduled Postgres backup is missing, stale, or failed
+k3s-backup-status context max_age_hours="26":
+    python3 deploy/k3s/backup-status.py {{quote(context)}} {{quote(max_age_hours)}}
 
 # Export hosted Planner and Projects data to JSON on this machine
 host-backup file="daily-planner-backup.json":

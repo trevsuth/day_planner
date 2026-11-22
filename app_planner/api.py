@@ -11,6 +11,7 @@ from app_graph.database import init_db as init_graph_db
 from app_projmgmt.api import router as project_router
 from app_projmgmt.database import init_db as init_project_db
 from app_planner.database import check_connection, init_db
+from app_planner.observability import RequestLogMiddleware
 from app_planner.routes import router as planner_router
 
 
@@ -30,6 +31,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Daily Planner API", lifespan=lifespan)
 
+app.add_middleware(RequestLogMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -39,6 +41,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
 app.include_router(planner_router)
 app.include_router(project_router)
