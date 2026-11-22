@@ -4,6 +4,7 @@ import projectsIcon from "lucide-static/icons/folder-kanban.svg?raw";
 import graphIcon from "lucide-static/icons/git-branch.svg?raw";
 import viewerIcon from "lucide-static/icons/file-text.svg?raw";
 import validationIcon from "lucide-static/icons/clipboard-check.svg?raw";
+import shortcutsIcon from "lucide-static/icons/circle-help.svg?raw";
 import apiIcon from "lucide-static/icons/clipboard-list.svg?raw";
 import fileIcon from "lucide-static/icons/folder-open.svg?raw";
 import sourceIcon from "lucide-static/icons/square-pen.svg?raw";
@@ -24,6 +25,7 @@ const icons = {
   viewer: viewerIcon,
   validation: validationIcon,
   api: apiIcon,
+  shortcuts: shortcutsIcon,
   file: fileIcon,
   source: sourceIcon,
   preview: previewIcon,

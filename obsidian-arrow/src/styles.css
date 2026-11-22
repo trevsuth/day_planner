@@ -178,6 +178,11 @@ select option {
   box-shadow: inset 0 -2px 0 var(--line-strong);
 }
 
+.app-tabs .shortcut-help-button {
+  border-color: rgba(216, 181, 96, 0.24);
+  color: var(--amber);
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

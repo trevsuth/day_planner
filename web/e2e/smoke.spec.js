@@ -441,3 +441,34 @@ test("validates files, previews invisible-character removal, and highlights both
   await tool().getByRole("button", { name: "Find matches" }).click();
   await expect(tool().locator("mark")).toHaveText(["cat"]);
 });
+
+test("shows the same module selector in every hosted view", async ({ page }) => {
+  const views = new Map([
+    ["Planner", "/"],
+    ["Projects", "/?view=projects"],
+    ["Graph", "/graph/"],
+    ["Viewer", "/viewer/"],
+    ["Validation", "/?view=validation"],
+    ["API", "/?view=api"],
+  ]);
+  const navigation = page.getByRole("navigation", { name: "Application views" });
+
+  for (const [current, url] of views) {
+    await page.goto(url);
+    for (const [label, href] of views) {
+      await expect(navigation.getByRole("link", { name: label, exact: true })).toHaveAttribute("href", href);
+    }
+    await expect(navigation.locator('[aria-current="page"]')).toHaveText(current);
+    await expect(navigation.getByLabel("Keyboard shortcuts")).toBeVisible();
+  }
+
+  for (const url of ["/graph/", "/viewer/"]) {
+    await page.goto(url);
+    const popupPromise = page.waitForEvent("popup");
+    await navigation.getByRole("link", { name: "Keyboard shortcuts" }).click();
+    const popup = await popupPromise;
+    await expect(popup.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+    await popup.close();
+    await expect(page).toHaveURL((location) => location.pathname === url);
+  }
+});
