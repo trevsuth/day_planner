@@ -10,6 +10,7 @@ from app_planner.migrate import check_schema
 from app_planner.observability import RequestLogMiddleware
 from app_planner.routes import router as planner_router
 from app_projmgmt.api import router as project_router
+from app_viewer.api import router as viewer_router
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(planner_router)
 app.include_router(project_router)
 app.include_router(graph_router)
+app.include_router(viewer_router)
 
 
 @app.get("/api/livez")

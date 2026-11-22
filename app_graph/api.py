@@ -26,8 +26,38 @@ def get_workspace(response: Response) -> Workspace:
     return load_workspace()
 
 
-@router.put("")
+@router.put(
+    "",
+    responses={
+        409: {"description": "The workspace revision is stale."},
+        413: {"description": "The request exceeds 24 MiB."},
+        422: {"description": "Invalid workspace or attachment data."},
+    },
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["revision", "document"],
+                        "properties": {
+                            "revision": {"type": "integer", "minimum": 0},
+                            "document": {"$ref": "#/components/schemas/GraphDocument"},
+                            "files": {
+                                "type": "object",
+                                "description": "Optional storage keys mapped to base64 file contents.",
+                                "additionalProperties": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
+)
 async def put_workspace(request: Request) -> dict[str, int]:
+    """Save a workspace at the revision returned by GET."""
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > MAX_REQUEST_BYTES:
@@ -46,8 +76,22 @@ async def put_workspace(request: Request) -> dict[str, int]:
     return {"revision": revision}
 
 
-@router.get("/attachments/{key}")
+@router.get(
+    "/attachments/{key}",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "application/octet-stream": {
+                    "schema": {"type": "string", "format": "binary"},
+                }
+            }
+        },
+        404: {"description": "Attachment key was not found."},
+    },
+)
 def get_attachment(key: AttachmentKey) -> Response:
+    """Download stored attachment bytes."""
     data = load_attachment(key)
     if data is None:
         raise HTTPException(404, "Attachment file not found.")
