@@ -50,7 +50,7 @@ Keep the application lightweight in day-to-day use:
    - Keep database tests separate from service behavior tests.
 
 5. Consider extracting markdown rendering
-   - Move markdown/Mermaid preview helpers out of `main.jsx`.
+   - Move markdown/Mermaid preview helpers out of `web/src/projects/ProjectsApp.jsx`.
    - Add focused tests for escaping, headings, lists, and fenced code blocks.
 
 ## Later
@@ -60,10 +60,10 @@ Keep the application lightweight in day-to-day use:
 
 2. Add structured application settings
    - Configure CORS and frontend hostnames only when non-local deployments require it.
-   - Keep SQLite and per-machine local storage as the default.
+   - Keep deployment-specific settings in environment configuration.
 
-3. Evaluate an external database option
-   - Consider Postgres only if multi-user hosting or concurrency becomes a real need.
+3. Evaluate shared Graph storage
+   - Decide whether Graph data and attachment files should sync between browser profiles or devices.
 
 4. Evaluate an MCP server
    - Expose planner and project actions only after data contracts and backup behavior are stable.

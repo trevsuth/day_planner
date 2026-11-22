@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-hosted
+.git
+.agents
+.codex
+npm-debug.log*
+Dockerfile
+docker-compose.yml
+.env
+

@@ -1,10 +1,24 @@
+set dotenv-load := true
+
 container_compose := env_var_or_default("CONTAINER_COMPOSE", "docker compose")
 database_url := env_var_or_default("DATABASE_URL", "postgresql://daily_planner:daily_planner@127.0.0.1:5432/daily_planner")
 test_database_url := env_var_or_default("TEST_DATABASE_URL", database_url)
+k3s_namespace := "daily-planner"
 
 # List available recipes
 default:
     @just --list
+
+# Install locked Python and frontend dependencies
+setup:
+    uv sync --locked
+    npm --prefix web ci
+    npm --prefix obsidian-arrow ci
+    npm --prefix viewer ci
+
+# Install Chromium for the browser tests and screenshot recipes
+browser-install:
+    npm --prefix web exec -- playwright install chromium
 
 # Run the test suite
 test:
@@ -14,21 +28,30 @@ test:
 test-postgres:
     TEST_DATABASE_URL='{{test_database_url}}' uv run pytest
 
-# Start only the local Postgres database for development
+# Start local Postgres and wait for connections
 db-up:
     {{container_compose}} up -d postgres
+    @for attempt in $(seq 1 30); do \
+      if {{container_compose}} exec -T postgres pg_isready -h 127.0.0.1 -U daily_planner -d daily_planner; then exit 0; fi; \
+      sleep 1; \
+    done; \
+    exit 1
 
 # Stop the local Postgres database
 db-down:
     {{container_compose}} stop postgres
 
-# Run focused browser smoke tests with an isolated Postgres schema
-web-test:
-    npm --prefix web run test:e2e
+# Check the Postgres connection used by the browser recipes
+test-db-check:
+    @DATABASE_URL={{quote(test_database_url)}} DATABASE_SCHEMA= PGCONNECT_TIMEOUT=5 uv run python -c 'from app_planner.database import check_connection; check_connection()' 2>/dev/null || { printf '%s\n' 'Cannot connect to the test Postgres database. For local Compose, run just db-up. For an existing database, check TEST_DATABASE_URL.' >&2; exit 1; }
 
-# Capture README screenshots with an isolated Postgres schema
-screenshots:
-    npm --prefix web run screenshots
+# Test the web suite with an isolated Postgres schema
+web-test: test-db-check
+    TEST_DATABASE_URL={{quote(test_database_url)}} npm --prefix web run test:e2e
+
+# Capture web suite screenshots with isolated data
+screenshots: test-db-check
+    TEST_DATABASE_URL={{quote(test_database_url)}} npm --prefix web run screenshots
 
 # Run frontend domain unit tests
 web-unit:
@@ -58,14 +81,14 @@ web:
 tui:
     DATABASE_URL='{{database_url}}' uv run python -m app_planner.ui
 
-# Run the API and React development servers together
-dev:
+# Build hosted Graph and Viewer, then run FastAPI and Planner Vite
+dev: graph-build viewer-build
     #!/usr/bin/env bash
     set -euo pipefail
-    export DATABASE_URL='{{database_url}}'
+    export DATABASE_URL={{quote(database_url)}}
     uv run uvicorn app_planner.api:app --reload &
     api_pid=$!
-    npm --prefix web run dev &
+    (cd web && exec node node_modules/vite/bin/vite.js --host 127.0.0.1) &
     web_pid=$!
     cleanup() {
       kill "$api_pid" "$web_pid" 2>/dev/null || true
@@ -73,31 +96,46 @@ dev:
     }
     trap cleanup EXIT
     trap 'exit 0' INT TERM
-    wait -n "$api_pid" "$web_pid"
+    while kill -0 "$api_pid" 2>/dev/null && kill -0 "$web_pid" 2>/dev/null; do
+      sleep 1
+    done
+    if kill -0 "$api_pid" 2>/dev/null; then
+      wait "$web_pid"
+    else
+      wait "$api_pid"
+    fi
 
-# Build and run the hosted container app; set CONTAINER_COMPOSE='podman compose' to switch engines
-host-up:
-    {{container_compose}} up --build
+# Build and run the Compose stack in the foreground, optionally selecting services
+[positional-arguments]
+host-up *services:
+    {{container_compose}} up --build "$@"
+
+# Build and start the Compose stack in the background, optionally selecting services
+[positional-arguments]
+host-start *services:
+    {{container_compose}} up --build -d "$@"
 
 # Stop the hosted container app
 host-down:
-    {{container_compose}} down
+    {{container_compose}} --profile legacy-graph down
 
 # Stop the hosted container app and remove its local database volume
 host-reset:
-    {{container_compose}} down --volumes
+    {{container_compose}} --profile legacy-graph down --volumes
 
-# Build the hosted container image without starting it
-host-build:
-    {{container_compose}} build
+# Build Compose images, optionally selecting services
+[positional-arguments]
+host-build *services:
+    {{container_compose}} build "$@"
 
-# Show hosted container logs
-host-logs:
-    {{container_compose}} logs -f
+# Follow Compose logs, optionally selecting services
+[positional-arguments]
+host-logs *services:
+    {{container_compose}} logs -f "$@"
 
-# Show hosted container status
+# Show running and stopped Compose containers
 host-ps:
-    {{container_compose}} ps
+    {{container_compose}} --profile legacy-graph ps --all
 
 # Render the k3s manifests with kustomize
 k3s-render:
@@ -107,19 +145,34 @@ k3s-render:
 k3s-apply:
     kubectl apply -k deploy/k3s
 
+# Build and push an image target (web, api, or viewer) for the cluster's platform
+k3s-publish image platform target="web":
+    docker buildx build --target {{quote(target)}} --platform {{quote(platform)}} --tag {{quote(image)}} --push .
+
 # Show k3s deployment status
 k3s-status:
-    kubectl -n daily-planner get ingress,pods,pvc,cronjob
+    kubectl -n {{k3s_namespace}} get ingress,services,deployments,statefulsets,pods,pvc,cronjobs
 
-# Export hosted data to a portable JSON backup on this machine
+# Wait for Postgres, API, web, and Viewer to roll out
+k3s-rollout:
+    kubectl -n {{k3s_namespace}} rollout status statefulset/postgres --timeout=5m
+    kubectl -n {{k3s_namespace}} rollout status deployment/daily-planner-api --timeout=5m
+    kubectl -n {{k3s_namespace}} rollout status deployment/daily-planner --timeout=5m
+    kubectl -n {{k3s_namespace}} rollout status deployment/markdown-viewer --timeout=5m
+
+# Follow logs for a suite deployment
+k3s-logs deployment="daily-planner-api":
+    kubectl -n {{k3s_namespace}} logs -f deployment/{{quote(deployment)}}
+
+# Export hosted Planner and Projects data to JSON on this machine
 host-backup file="daily-planner-backup.json":
-    {{container_compose}} exec -T daily-planner python -m app_planner.backup export /tmp/daily-planner-backup.json
-    {{container_compose}} cp daily-planner:/tmp/daily-planner-backup.json "{{file}}"
+    {{container_compose}} exec -T daily-planner-api python -m app_planner.backup export /tmp/daily-planner-backup.json
+    {{container_compose}} cp daily-planner-api:/tmp/daily-planner-backup.json "{{file}}"
 
-# Restore hosted data from a portable JSON backup, replacing hosted data
+# Replace hosted Planner and Projects data from a JSON backup
 host-restore file="daily-planner-backup.json":
-    {{container_compose}} cp "{{file}}" daily-planner:/tmp/daily-planner-backup.json
-    {{container_compose}} exec -T daily-planner python -m app_planner.backup restore /tmp/daily-planner-backup.json
+    {{container_compose}} cp "{{file}}" daily-planner-api:/tmp/daily-planner-backup.json
+    {{container_compose}} exec -T daily-planner-api python -m app_planner.backup restore /tmp/daily-planner-backup.json
 
 # Build and run the hosted app with Docker Compose
 docker-up:
@@ -164,6 +217,25 @@ podman-logs:
 # Build the React frontend
 web-build:
     npm --prefix web run build
+
+# Run Graph by itself with Vite hot reload
+graph-dev:
+    npm --prefix obsidian-arrow run dev -- --host 127.0.0.1
+
+# Typecheck and build Graph for the shared /graph/ route
+graph-build:
+    npm --prefix obsidian-arrow run build:hosted
+
+# Run the Viewer on its own Vite development server
+viewer-dev:
+    npm --prefix viewer run dev
+
+# Build the Viewer for the shared /viewer/ route
+viewer-build:
+    npm --prefix viewer run build
+
+# Build Planner, Projects, Graph, and Viewer assets
+frontend-build: web-build graph-build viewer-build
 
 # Typecheck the TypeScript frontend foundation
 web-typecheck:

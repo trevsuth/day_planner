@@ -1,0 +1,9 @@
+services:
+  arrowsapp:
+    build:
+      context: .
+    image: arrowsapp:local
+    ports:
+      - "${ARROWSAPP_PORT:-8080}:80"
+    restart: unless-stopped
+
