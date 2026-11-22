@@ -231,23 +231,7 @@ test("capture Viewer screenshot", async ({ page }) => {
   await fs.mkdir(screenshotDirectory, { recursive: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/viewer/");
-  await page.getByLabel("Source", { exact: true }).fill([
-    "# Release workflow",
-    "",
-    "Review the release notes before deploying to the home lab.",
-    "",
-    "```mermaid",
-    "flowchart LR",
-    "  Draft --> Review{Approved?}",
-    "  Review -->|Yes| Deploy",
-    "  Review -->|Revise| Draft",
-    "  Deploy --> Verify",
-    "```",
-    "",
-    "- Check the health endpoint.",
-    "- Record the deployed image tag.",
-  ].join("\n"));
-  await expect(page.getByRole("heading", { name: "Release workflow" })).toBeVisible();
+  await expect(page.getByLabel("Diagram type")).toHaveValue("flowchart");
   await page.waitForFunction(() => document.querySelector(".diagram img")?.naturalWidth > 0);
   await page.screenshot({ path: path.join(screenshotDirectory, "viewer.png"), fullPage: true });
 });

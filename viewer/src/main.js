@@ -7,6 +7,13 @@ import apiIcon from "lucide-static/icons/clipboard-list.svg?raw";
 import fileIcon from "lucide-static/icons/folder-open.svg?raw";
 import sourceIcon from "lucide-static/icons/square-pen.svg?raw";
 import previewIcon from "lucide-static/icons/scan-eye.svg?raw";
+import expandIcon from "lucide-static/icons/maximize.svg?raw";
+import restoreIcon from "lucide-static/icons/minimize.svg?raw";
+import zoomInIcon from "lucide-static/icons/zoom-in.svg?raw";
+import zoomOutIcon from "lucide-static/icons/zoom-out.svg?raw";
+import handIcon from "lucide-static/icons/hand.svg?raw";
+import { diagramExamples } from "./diagram-examples.js";
+import { enablePreviewNavigation } from "./preview-navigation.js";
 import "./styles.css";
 
 const icons = {
@@ -18,6 +25,10 @@ const icons = {
   file: fileIcon,
   source: sourceIcon,
   preview: previewIcon,
+  expand: expandIcon,
+  zoomIn: zoomInIcon,
+  zoomOut: zoomOutIcon,
+  hand: handIcon,
 };
 for (const element of document.querySelectorAll("[data-icon]")) {
   element.innerHTML = icons[element.dataset.icon];
@@ -25,10 +36,38 @@ for (const element of document.querySelectorAll("[data-icon]")) {
 
 const source = document.querySelector("#source");
 const mode = document.querySelector("#mode");
+const diagramControls = document.querySelector("#diagram-controls");
+const diagramType = document.querySelector("#diagram-type");
 const file = document.querySelector("#file");
 const preview = document.querySelector("#preview");
+const workspace = document.querySelector("#viewer-workspace");
+const sourcePane = document.querySelector("#source-pane");
+const previewSize = document.querySelector("#preview-size");
 const fileError = document.querySelector("#file-error");
 const maxSourceSize = 100_000;
+const drafts = new Map(diagramExamples.map(({ id, source }) => [id, source]));
+
+for (const { id, label } of diagramExamples) {
+  diagramType.add(new Option(label, id));
+}
+
+function setPreviewExpanded(expanded) {
+  workspace.classList.toggle("preview-expanded", expanded);
+  sourcePane.hidden = expanded;
+  const action = expanded ? "Restore split view" : "Expand preview";
+  previewSize.title = action;
+  previewSize.setAttribute("aria-label", action);
+  previewSize.firstElementChild.innerHTML = expanded ? restoreIcon : expandIcon;
+}
+
+previewSize.addEventListener("click", () => setPreviewExpanded(!sourcePane.hidden));
+enablePreviewNavigation(document.querySelector("#preview-viewport"), preview, mode);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && sourcePane.hidden) {
+    setPreviewExpanded(false);
+    previewSize.focus();
+  }
+});
 
 const markdown = new MarkdownIt({ html: false, linkify: true });
 const renderFence = markdown.renderer.rules.fence;
@@ -119,8 +158,22 @@ function scheduleRender() {
   timer = setTimeout(() => render(version), 180);
 }
 
-source.addEventListener("input", scheduleRender);
-mode.addEventListener("change", scheduleRender);
+function activeDraft() {
+  return mode.value === "mermaid" ? diagramType.value : "markdown";
+}
+
+function showDraft() {
+  diagramControls.hidden = mode.value !== "mermaid";
+  source.value = drafts.get(activeDraft()) ?? "";
+  scheduleRender();
+}
+
+source.addEventListener("input", () => {
+  drafts.set(activeDraft(), source.value);
+  scheduleRender();
+});
+mode.addEventListener("change", showDraft);
+diagramType.addEventListener("change", showDraft);
 file.addEventListener("change", async () => {
   const selected = file.files[0];
   file.value = "";
@@ -130,12 +183,16 @@ file.addEventListener("change", async () => {
     const content = await selected.text();
     if (content.length > maxSourceSize) throw new Error("Choose a file with 100,000 characters or fewer.");
     mode.value = /\.(mmd|mermaid)$/i.test(selected.name) ? "mermaid" : "markdown";
-    source.value = content;
-    scheduleRender();
+    if (mode.value === "mermaid") {
+      if (!drafts.has("file")) diagramType.add(new Option("Opened diagram", "file"));
+      diagramType.value = "file";
+    }
+    drafts.set(activeDraft(), content);
+    showDraft();
   } catch (error) {
     fileError.textContent = error.message;
     fileError.hidden = false;
   }
 });
 
-scheduleRender();
+showDraft();

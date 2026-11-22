@@ -6,11 +6,63 @@ test("opens the Viewer and renders Markdown, Mermaid files, and diagram errors",
   await page.getByRole("navigation", { name: "Application views" }).getByRole("link", { name: "Viewer" }).click();
   await expect(page).toHaveURL(/\/viewer\/$/);
   const source = page.getByLabel("Source", { exact: true });
-  const preview = page.getByRole("region", { name: "Preview" });
+  const preview = page.getByRole("region", { name: "Preview", exact: true });
+  const format = page.getByLabel("Format");
+  const diagramType = page.getByLabel("Diagram type");
+  const diagram = preview.getByRole("img", { name: "Mermaid diagram" });
+  await expect(format).toHaveValue("mermaid");
+  await expect(diagramType).toHaveValue("flowchart");
+  await expect(source).toHaveValue(/^flowchart LR/);
+  await expect(diagram).toBeVisible();
+  await expect.poll(() => diagram.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+
+  for (const type of ["sequence", "class", "state", "er", "gantt", "pie", "mindmap", "timeline", "git"]) {
+    const previousImage = await diagram.getAttribute("src");
+    await diagramType.selectOption(type);
+    await expect(diagram).not.toHaveAttribute("src", previousImage);
+    await expect.poll(() => diagram.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  }
+  await diagramType.selectOption("sequence");
+  const editedSequence = "sequenceDiagram\n  Alice->>Bob: Draft edit";
+  await source.fill(editedSequence);
+  const splitWidth = (await preview.boundingBox()).width;
+  await preview.getByRole("button", { name: "Expand preview" }).click();
+  await expect(source).toBeHidden();
+  await expect.poll(async () => (await preview.boundingBox()).width).toBeGreaterThan(splitWidth * 1.8);
+  await expect(page.getByRole("navigation", { name: "Application views" })).toBeVisible();
+  await expect(preview.getByRole("button", { name: "Restore split view" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(source).toBeVisible();
+  await expect(source).toHaveValue(editedSequence);
+  await expect(preview.getByRole("button", { name: "Expand preview" })).toBeFocused();
+  const canvas = preview.getByRole("region", { name: "Preview canvas" });
+  await preview.getByRole("button", { name: "Zoom in" }).click();
+  await preview.getByRole("button", { name: "Zoom in" }).click();
+  await expect(preview.getByLabel("Preview zoom")).toHaveText("156%");
+  const pan = preview.getByRole("button", { name: "Pan preview" });
+  await pan.click();
+  await expect(pan).toHaveAttribute("aria-pressed", "true");
+  const area = await canvas.boundingBox();
+  const beforePan = await canvas.evaluate((element) => element.scrollLeft);
+  await page.mouse.move(area.x + area.width / 2, area.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(area.x + area.width / 2 - 75, area.y + 100, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => canvas.evaluate((element) => element.scrollLeft)).toBeGreaterThan(beforePan);
+  await pan.click();
+  await preview.getByRole("button", { name: "Fit" }).click();
+  await expect(preview.getByLabel("Preview zoom")).toHaveText("100%");
+  await expect.poll(() => canvas.evaluate((element) => element.scrollLeft)).toBe(0);
+  await diagramType.selectOption("flowchart");
+  await expect(source).toHaveValue(/^flowchart LR/);
+  await diagramType.selectOption("sequence");
+  await expect(source).toHaveValue(editedSequence);
+
+  await format.selectOption("markdown");
+  await expect(diagramType).toBeHidden();
   await source.fill("# Release notes\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n<strong>Raw HTML</strong>");
   await expect(preview.getByRole("heading", { name: "Release notes" })).toBeVisible();
   await expect(preview.getByText("<strong>Raw HTML</strong>")).toBeVisible();
-  const diagram = preview.getByRole("img", { name: "Mermaid diagram" });
   await expect(diagram).toBeVisible();
   await expect.poll(() => diagram.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
 
@@ -20,6 +72,7 @@ test("opens the Viewer and renders Markdown, Mermaid files, and diagram errors",
     buffer: Buffer.from("sequenceDiagram\n  Alice->>Bob: Review"),
   });
   await expect(page.getByLabel("Format")).toHaveValue("mermaid");
+  await expect(diagramType).toHaveValue("file");
   await expect(diagram).toBeVisible();
   await expect.poll(() => diagram.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
   await source.fill("invalid diagram syntax");
