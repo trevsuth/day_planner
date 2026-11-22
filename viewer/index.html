@@ -7,32 +7,43 @@
     <title>Markdown &amp; Mermaid Viewer</title>
   </head>
   <body>
-    <header class="masthead">
-      <nav aria-label="Application views">
-        <a href="/">Planner</a><a href="/?view=projects">Projects</a><a href="/graph/">Graph</a><a href="/viewer/" aria-current="page">Viewer</a><a href="/?view=api">API</a>
+    <main class="app-shell">
+      <nav class="app-tabs" aria-label="Application views">
+        <a href="/"><span data-icon="planner" aria-hidden="true"></span>Planner</a>
+        <a href="/?view=projects"><span data-icon="projects" aria-hidden="true"></span>Projects</a>
+        <a href="/graph/"><span data-icon="graph" aria-hidden="true"></span>Graph</a>
+        <a href="/viewer/" aria-current="page"><span data-icon="viewer" aria-hidden="true"></span>Viewer</a>
+        <a href="/?view=api"><span data-icon="api" aria-hidden="true"></span>API</a>
       </nav>
-    </header>
-    <main>
-      <div class="heading">
-        <h1>Markdown &amp; Mermaid Viewer</h1>
-        <label class="file-control">Open file <input id="file" type="file" accept=".md,.markdown,.mmd,.mermaid,.txt,text/plain"></label>
-      </div>
+      <header class="topbar">
+        <div>
+          <div class="eyebrow"><span data-icon="viewer" aria-hidden="true"></span>Viewer</div>
+          <h1>Markdown &amp; Mermaid</h1>
+        </div>
+        <div class="toolbar-group" role="group" aria-label="Document controls">
+          <label class="mode-label" for="mode">Format</label>
+          <select id="mode">
+            <option value="markdown">Markdown</option>
+            <option value="mermaid">Mermaid</option>
+          </select>
+          <label class="file-control">
+            <span data-icon="file" aria-hidden="true"></span>Open file
+            <input id="file" type="file" accept=".md,.markdown,.mmd,.mermaid,.txt,text/plain">
+          </label>
+        </div>
+      </header>
       <p id="file-error" role="alert" hidden></p>
       <div class="workspace">
         <section class="pane editor" aria-label="Editor">
           <div class="pane-header">
-            <label for="source">Source</label>
-            <label for="mode" class="mode-label">Format
-              <select id="mode">
-                <option value="markdown">Markdown</option>
-                <option value="mermaid">Mermaid</option>
-              </select>
-            </label>
+            <span data-icon="source" aria-hidden="true"></span><label for="source">Source</label>
           </div>
           <textarea id="source" maxlength="100000" spellcheck="false" placeholder="Paste Markdown or Mermaid source"></textarea>
         </section>
         <section class="pane" aria-labelledby="preview-heading">
-          <div class="pane-header"><h2 id="preview-heading">Preview</h2></div>
+          <div class="pane-header">
+            <span data-icon="preview" aria-hidden="true"></span><h2 id="preview-heading">Preview</h2>
+          </div>
           <div id="preview" class="preview"></div>
         </section>
       </div>
