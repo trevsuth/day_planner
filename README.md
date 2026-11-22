@@ -100,7 +100,8 @@ available directly at `/graph/` and Viewer at `/viewer/`. If you used Graph on a
 hostname, follow the [graph migration steps](deploy/k3s/README.md#move-an-existing-graph)
 to bring over your graph and attachments.
 
-`just host-start` starts four services in the background. Use `just host-up`
+`just host-start` starts web, API, and PostgreSQL in the background. A one-shot
+migration service prepares the database before the API starts. Use `just host-up`
 for a foreground run, `just host-ps` for status, and
 `just host-logs daily-planner-api` to follow API logs. Docker Compose is the
 default. To start the suite with Podman Compose:
@@ -115,9 +116,9 @@ Docker-specific shortcuts are also available:
 just docker-up
 ```
 
-Each computer uses its own Postgres volume. When upgrading from the combined
-image, run `just host-down` and then `just host-start` from the same checkout
-and Compose project so the services reuse that volume. To stop the suite while
+Each Compose project uses its own PostgreSQL volume. When upgrading from an
+older stack, run `just host-down` with that checkout and then `just host-start`
+with the new release and the same Compose project name to reuse the volume. To stop the suite while
 keeping the database:
 
 ```bash
@@ -191,16 +192,14 @@ just
 
 ### k3s Deployment
 
-The k3s deployment serves the web shell, API, and Viewer through one ingress.
-The manifests include a Postgres StatefulSet, persisted storage, and a nightly
-`pg_dump` backup CronJob. See the
-[k3s deployment guide](deploy/k3s/README.md) for image rollout and graph migration.
+The k3s deployment serves the static frontends and API through one Ingress.
+It runs PostgreSQL in a StatefulSet with a persistent data volume and a nightly
+`pg_dump` CronJob. See the [architecture](ARCHITECTURE.md) and
+[k3s deployment guide](deploy/k3s/README.md) for pinned releases, migration,
+HTTPS, rollout checks, and off-device recovery. Run `just k3s-render` to
+preview the example without connecting to a cluster.
 
-The guide walks through installing from a digest-pinned release, setting up HTTPS,
-initializing the database, and checking the rollout. It also covers off-node backups. Run `just k3s-render` to preview the
-example without connecting to a cluster.
-
-Cluster-wide monitoring should be managed outside this repo. The API exposes `/api/health` for database readiness and `/api/livez` for process liveness.
+Cluster-wide monitoring should be managed outside this repo. The API exposes `/api/health` for database and schema readiness and `/api/livez` for process liveness.
 
 ## Requirements
 
@@ -214,7 +213,11 @@ Cluster-wide monitoring should be managed outside this repo. The API exposes `/a
 
 The TUI and web app connect to Postgres through `DATABASE_URL`. Root `just` recipes load `.env` when present. If you change `POSTGRES_PORT`, update `DATABASE_URL` and `TEST_DATABASE_URL` for host-side commands. Set `DATABASE_SCHEMA` to isolate tables into a named Postgres schema, which is useful for tests or multiple local environments. For local container hosting, Docker Compose starts Postgres and persists it in the local named volume `daily_planner_postgres_data`. Docker and Podman keep their own local volume stores, so each computer and container engine has separate data by default.
 
-To import existing SQLite data after starting Postgres:
+Run `just db-migrate` to prepare PostgreSQL before starting the API or TUI
+directly. The `just api`, `just dev`, and `just tui` recipes run the migration
+command before launching.
+
+To import existing SQLite data after starting PostgreSQL:
 
 ```bash
 just migrate-sqlite planner.db project_mgmt.db
@@ -247,7 +250,7 @@ just web-unit
 just web-test
 ```
 
-The frontend typecheck covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build all three bundles, start an isolated local API server, and set `DATABASE_SCHEMA` so test tables stay separate from local application data.
+The frontend typecheck covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build all three bundles, migrate an isolated PostgreSQL schema, and start a local API server.
 
 With Postgres running (`just db-up` for local Compose), capture README
 screenshots from isolated demo data. The recipe uses `TEST_DATABASE_URL` when
@@ -259,7 +262,7 @@ just screenshots
 
 Screenshots are written to `docs/screenshots/`.
 
-Continuous integration runs the same core checks on pushes to `main` and pull requests: Ruff, Python tests, frontend build, frontend typecheck, frontend unit tests, and the focused Playwright smoke tests with isolated Postgres schemas.
+Continuous integration runs the same core checks on pushes to `main` and pull requests: Ruff, Python tests, frontend build, frontend typecheck, frontend unit tests, and focused Playwright smoke tests with isolated PostgreSQL schemas, and strict validation of the HTTP and TLS Kubernetes manifests.
 
 ## Backup And Restore
 
@@ -337,18 +340,15 @@ Project hierarchy, dependency, and schedule-warning rules are implemented server
 
 ## Platform Notes
 
-| Service | Public routes | Responsibility |
+| Service | Routes | Responsibility |
 | --- | --- | --- |
-| `daily-planner` | `/`, `/?view=projects`, `/graph/` | Web shell and the Planner, Projects, and Graph frontends |
+| `daily-planner` | `/`, `/?view=projects`, `/graph/`, `/viewer/` | Nginx serves the hosted static frontends |
 | `daily-planner-api` | `/api/`, `/docs`, `/openapi.json` | Unified FastAPI service for Planner, Projects, and Graph |
-| `markdown-viewer` | `/viewer/` | Independently buildable and deployable static viewer |
 | `postgres` | — | Stores Planner, Projects, Graph, and Graph attachment data |
 
-The web shell routes requests in Compose. k3s uses a shared ingress for the
-same URLs. The Textual client uses the Planner and Projects service modules.
-To deploy a Viewer change locally, run `just host-start markdown-viewer`.
-See [Adding a tool](deploy/k3s/README.md#adding-a-tool) for the routing and
-deployment pattern.
+Nginx proxies the API in Compose. K3s Ingress routes `/api/` to FastAPI directly.
+The Textual client uses the Planner and Projects service modules. Rebuild the
+`daily-planner` service to update any hosted frontend bundle.
 
 ## Controls
 
@@ -438,6 +438,8 @@ just build
 ```
 
 The PyInstaller build uses `planner.spec` and includes `app_planner/ui.css` in the bundled app.
+Prepare the configured database with `just db-migrate` from the matching
+source checkout before launching the executable against a fresh database.
 
 Build the React frontend:
 
@@ -457,6 +459,7 @@ Available `just` recipes:
 | `just test` | Run the Python test suite |
 | `just test-postgres` | Run the full Postgres-backed Python test suite |
 | `just db-up` | Start local Postgres and wait for connections |
+| `just db-migrate` | Apply versioned schema changes to the workstation database |
 | `just db-down` | Stop the local Postgres database |
 | `just web-typecheck` | Typecheck the TypeScript frontend foundation |
 | `just web-unit` | Run frontend domain unit tests |
@@ -478,9 +481,6 @@ Available `just` recipes:
 | `just host-build [services…]` | Build Compose service images |
 | `just host-logs [services…]` | Follow Compose logs |
 | `just host-ps` | Show running and stopped Compose containers |
-| `just k3s-publish IMAGE PLATFORM [target]` | Build and push the `web`, `api`, or `viewer` target. Defaults to `web` |
-| `just k3s-rollout CONTEXT` | Wait for Postgres, API, web, and Viewer |
-| `just k3s-logs CONTEXT [deployment]` | Follow deployment logs. Defaults to the API |
 | `just k3s-render [overlay]` | Preview the example or a configured k3s overlay |
 | `just k3s-init-db CONTEXT` | Initialize or reuse the database secret |
 | `just k3s-preflight CONTEXT [overlay]` | Validate the configured overlay against the target cluster |
@@ -488,7 +488,6 @@ Available `just` recipes:
 | `just k3s-smoke URL` | Verify the web and API routes through ingress |
 | `just k3s-backup CONTEXT FILE` | Stream a full Postgres archive to a new local file |
 | `just k3s-backup-status CONTEXT [max_age_hours]` | Check scheduled backup success and freshness |
-| `just k3s-status CONTEXT` | Show k3s deployment status |
 | `just host-backup [file]` | Export hosted Planner and Projects data to JSON |
 | `just host-restore [file]` | Replace hosted Planner and Projects data from JSON |
 | `just docker-up` | Build and run the Docker Compose hosted app |
@@ -533,7 +532,7 @@ web/
   src/planner/  React planner view
   src/projects/ React project management view
 viewer/         Markdown and Mermaid viewer
-deploy/k3s/     Web, API, Viewer, Postgres, ingress, and backup manifests
+deploy/k3s/     Web, API, PostgreSQL, Ingress, migration, and backup manifests
 deploy/nginx/  Web shell proxy and static server configuration
 docker-compose.yml
 justfile

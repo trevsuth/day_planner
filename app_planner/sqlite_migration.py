@@ -3,10 +3,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from app_planner.database import init_db as init_planner_db
 from app_planner.database import replace_entries
 from app_planner.models import PlannerEntry, Task
-from app_projmgmt.database import init_db as init_project_db
 from app_projmgmt.database import replace_project_data
 from app_projmgmt.models import Project, ProjectCard, ProjectCardActivity
 
@@ -65,8 +63,6 @@ def load_card_activity(path: Path) -> list[ProjectCardActivity]:
 
 
 def migrate_sqlite_to_postgres(planner_db: Path, project_db: Path) -> None:
-    init_planner_db()
-    init_project_db()
     replace_entries(load_planner_entries(planner_db))
     replace_project_data(
         load_projects(project_db),

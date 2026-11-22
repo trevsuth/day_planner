@@ -1,12 +1,9 @@
-import os
 import json
 from datetime import datetime, timezone
 
-import psycopg
-from psycopg import sql
-from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from app_planner.postgres import get_connection
 from app_projmgmt.models import (
     Project,
     ProjectCard,
@@ -14,117 +11,6 @@ from app_projmgmt.models import (
     ProjectCardCreate,
     ProjectCreate,
 )
-
-
-def database_url() -> str:
-    return os.environ.get(
-        "DATABASE_URL",
-        "postgresql://daily_planner:daily_planner@127.0.0.1:5432/daily_planner",
-    )
-
-
-def get_connection():
-    conn = psycopg.connect(database_url(), row_factory=dict_row)
-    configure_schema(conn)
-    return conn
-
-
-def configure_schema(conn) -> None:
-    schema = os.environ.get("DATABASE_SCHEMA")
-    if not schema:
-        return
-    conn.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema)))
-    conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
-
-
-def applied_migrations(conn) -> set[int]:
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS projmgmt_schema_migrations (
-            version INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-    """)
-    rows = conn.execute("SELECT version FROM projmgmt_schema_migrations").fetchall()
-    return {row["version"] for row in rows}
-
-
-def record_migration(conn, version: int, name: str) -> None:
-    conn.execute(
-        """
-        INSERT INTO projmgmt_schema_migrations (version, name)
-        VALUES (%s, %s)
-        """,
-        (version, name),
-    )
-
-
-def migration_002_create_project_tables(conn) -> None:
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS projects (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT,
-            created_at TIMESTAMPTZ NOT NULL,
-            updated_at TIMESTAMPTZ NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS project_cards (
-            id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE
-                DEFERRABLE INITIALLY DEFERRED,
-            card_type TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            comments TEXT,
-            status TEXT NOT NULL,
-            start_date DATE,
-            due_date DATE,
-            parent_id TEXT REFERENCES project_cards(id) ON DELETE SET NULL
-                DEFERRABLE INITIALLY DEFERRED,
-            dependency_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
-            deliverables JSONB NOT NULL DEFAULT '[]'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL,
-            updated_at TIMESTAMPTZ NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS project_card_activity (
-            id TEXT PRIMARY KEY,
-            project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE
-                DEFERRABLE INITIALLY DEFERRED,
-            card_id TEXT NOT NULL REFERENCES project_cards(id) ON DELETE CASCADE
-                DEFERRABLE INITIALLY DEFERRED,
-            field_name TEXT NOT NULL,
-            old_value TEXT,
-            new_value TEXT,
-            created_at TIMESTAMPTZ NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_project_cards_project_id_created_at
-        ON project_cards (project_id, created_at)
-    """)
-    conn.execute("""
-        CREATE INDEX IF NOT EXISTS idx_project_card_activity_card_id_created_at
-        ON project_card_activity (card_id, created_at DESC)
-    """)
-
-
-MIGRATIONS = [
-    (1, "create_project_tables", migration_002_create_project_tables),
-]
-
-
-def init_db() -> None:
-    with get_connection() as conn:
-        applied = applied_migrations(conn)
-        for version, name, migration in MIGRATIONS:
-            if version in applied:
-                continue
-            migration(conn)
-            record_migration(conn, version, name)
 
 
 def now_iso() -> str:

@@ -8,6 +8,6 @@ resources:
   - postgres.yaml
   - app.yaml
   - api.yaml
-  - viewer.yaml
+  - migration-job.yaml
   - ingress.yaml
   - backup-cronjob.yaml

@@ -1,7 +1,7 @@
 from psycopg.types.json import Jsonb
 
 from app_graph.models import Workspace, WorkspaceUpdate
-from app_planner.database import get_connection
+from app_planner.postgres import get_connection
 
 
 class RevisionConflict(Exception):
@@ -10,28 +10,6 @@ class RevisionConflict(Exception):
 
 class InvalidAttachment(ValueError):
     pass
-
-
-def init_db() -> None:
-    with get_connection() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS graph_workspace (
-                singleton BOOLEAN PRIMARY KEY CHECK (singleton),
-                revision BIGINT NOT NULL DEFAULT 0,
-                document JSONB
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS graph_attachments (
-                storage_key TEXT PRIMARY KEY,
-                data BYTEA NOT NULL
-            )
-        """)
-        conn.execute("""
-            INSERT INTO graph_workspace (singleton)
-            VALUES (TRUE)
-            ON CONFLICT DO NOTHING
-        """)
 
 
 def load_workspace() -> Workspace:

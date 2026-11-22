@@ -3,7 +3,6 @@ set dotenv-load := true
 container_compose := env_var_or_default("CONTAINER_COMPOSE", "docker compose")
 database_url := env_var_or_default("DATABASE_URL", "postgresql://daily_planner:daily_planner@127.0.0.1:5432/daily_planner")
 test_database_url := env_var_or_default("TEST_DATABASE_URL", database_url)
-k3s_namespace := "daily-planner"
 
 # List available recipes
 default:
@@ -43,7 +42,7 @@ db-down:
 
 # Check the Postgres connection used by the browser recipes
 test-db-check:
-    @DATABASE_URL={{quote(test_database_url)}} DATABASE_SCHEMA= PGCONNECT_TIMEOUT=5 uv run python -c 'from app_planner.database import check_connection; check_connection()' 2>/dev/null || { printf '%s\n' 'Cannot connect to the test Postgres database. For local Compose, run just db-up. For an existing database, check TEST_DATABASE_URL.' >&2; exit 1; }
+    @DATABASE_URL={{quote(test_database_url)}} DATABASE_SCHEMA= PGCONNECT_TIMEOUT=5 uv run python -c 'from app_planner.postgres import check_connection; check_connection()' 2>/dev/null || { printf '%s\n' 'Cannot connect to the test Postgres database. For local Compose, run just db-up. For an existing database, check TEST_DATABASE_URL.' >&2; exit 1; }
 
 # Test the web suite with an isolated Postgres schema
 web-test: test-db-check
@@ -62,15 +61,19 @@ backup file="daily-planner-backup.json":
     DATABASE_URL='{{database_url}}' uv run python -m app_planner.backup export "{{file}}"
 
 # Restore planner and project data from a portable JSON backup, replacing local data
-restore file="daily-planner-backup.json":
+restore file="daily-planner-backup.json": db-migrate
     DATABASE_URL='{{database_url}}' uv run python -m app_planner.backup restore "{{file}}"
 
 # Import existing SQLite databases into the configured Postgres database
-migrate-sqlite planner_db="planner.db" project_db="project_mgmt.db":
+migrate-sqlite planner_db="planner.db" project_db="project_mgmt.db": db-migrate
     DATABASE_URL='{{database_url}}' uv run python -m app_planner.sqlite_migration --planner-db "{{planner_db}}" --project-db "{{project_db}}"
 
+# Apply schema migrations to the configured workstation database
+db-migrate:
+    DATABASE_URL={{quote(database_url)}} uv run python -m app_planner.migrate
+
 # Run the API server for the React frontend
-api:
+api: db-migrate
     DATABASE_URL='{{database_url}}' uv run uvicorn app_planner.api:app --reload --no-access-log
 
 # Run the React development server
@@ -78,11 +81,11 @@ web:
     npm --prefix web run dev
 
 # Run the terminal planner
-tui:
+tui: db-migrate
     DATABASE_URL='{{database_url}}' uv run python -m app_planner.ui
 
 # Build hosted Graph and Viewer, then run FastAPI and Planner Vite
-dev: graph-build viewer-build
+dev: db-migrate graph-build viewer-build
     #!/usr/bin/env bash
     set -euo pipefail
     export DATABASE_URL={{quote(database_url)}}
@@ -150,29 +153,10 @@ k3s-preflight context overlay="deploy/k3s-overlays/local":
     bash deploy/k3s/setup.sh preflight {{quote(context)}} {{quote(overlay)}}
 
 # Apply the configured k3s overlay to a named context
-k3s-apply context overlay="deploy/k3s-overlays/local": (k3s-preflight context overlay)
-    kubectl --context {{quote(context)}} apply -k {{quote(overlay)}}
+k3s-apply context overlay="deploy/k3s-overlays/local":
+    bash deploy/k3s/setup.sh apply {{quote(context)}} {{quote(overlay)}}
 
-# Build and push an image target (web, api, or viewer) for the cluster's platform
-k3s-publish image platform target="web":
-    docker buildx build --target {{quote(target)}} --platform {{quote(platform)}} --tag {{quote(image)}} --push .
-
-# Show k3s deployment status
-k3s-status context:
-    kubectl --context {{quote(context)}} -n {{k3s_namespace}} get ingress,services,deployments,statefulsets,pods,pvc,cronjobs
-
-# Wait for Postgres, API, web, and Viewer to roll out
-k3s-rollout context:
-    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status statefulset/postgres --timeout=5m
-    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status deployment/daily-planner-api --timeout=5m
-    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status deployment/daily-planner --timeout=5m
-    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status deployment/markdown-viewer --timeout=5m
-
-# Follow logs for a suite deployment
-k3s-logs context deployment="daily-planner-api":
-    kubectl --context {{quote(context)}} -n {{k3s_namespace}} logs -f deployment/{{quote(deployment)}}
-
-# Verify Planner, Graph, Viewer, and API through the public URL
+# Verify Planner, Graph, Viewer, and API through the deployment URL
 k3s-smoke url:
     bash deploy/k3s/smoke.sh {{quote(url)}}
 

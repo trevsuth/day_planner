@@ -1,12 +1,7 @@
-import os
 from datetime import date
-from uuid import uuid4
 
-import psycopg
 import pytest
 from fastapi import HTTPException
-from psycopg import sql
-from psycopg.rows import dict_row
 
 from app_projmgmt import database as project_database
 from app_projmgmt.api import put_card
@@ -24,7 +19,6 @@ from app_projmgmt.database import (
     delete_project,
     get_card,
     get_project,
-    init_db,
     list_card_activity,
     list_cards,
     list_projects,
@@ -37,28 +31,6 @@ from app_projmgmt.models import (
     ProjectCardUpdate,
     ProjectCreate,
 )
-
-
-@pytest.fixture
-def temp_db(monkeypatch):
-    database_url = os.environ.get("TEST_DATABASE_URL")
-    if not database_url:
-        pytest.skip("TEST_DATABASE_URL is required for Postgres database tests.")
-
-    schema = f"test_{uuid4().hex}"
-    with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema)))
-
-    def _get_temp_connection():
-        conn = psycopg.connect(database_url, row_factory=dict_row)
-        conn.execute(sql.SQL("SET search_path TO {}").format(sql.Identifier(schema)))
-        return conn
-
-    monkeypatch.setattr("app_projmgmt.database.get_connection", _get_temp_connection)
-    init_db()
-    yield
-    with psycopg.connect(database_url, autocommit=True) as conn:
-        conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))
 
 
 def test_create_project_and_card(temp_db):
@@ -423,7 +395,7 @@ def test_project_issues_are_computed_by_service_rules(temp_db):
     assert (dependent.id, "date_conflict", dependency.id) in issue_keys
 
 
-def test_init_db_creates_project_schema(temp_db):
+def test_migration_creates_project_schema(temp_db):
     with project_database.get_connection() as conn:
         columns = {
             row["column_name"]: row["data_type"]
@@ -431,15 +403,15 @@ def test_init_db_creates_project_schema(temp_db):
                 """
                 SELECT column_name, data_type
                 FROM information_schema.columns
-                WHERE table_name = 'project_cards'
+                WHERE table_schema = current_schema() AND table_name = 'project_cards'
                 """
             ).fetchall()
         }
         migrations = conn.execute(
-            "SELECT version, name FROM projmgmt_schema_migrations ORDER BY version"
+            "SELECT version FROM day_planner_schema_migrations ORDER BY version"
         ).fetchall()
 
     assert columns["start_date"] == "date"
     assert columns["dependency_ids"] == "jsonb"
     assert columns["deliverables"] == "jsonb"
-    assert migrations == [{"version": 1, "name": "create_project_tables"}]
+    assert migrations == [{"version": "001_baseline"}]
