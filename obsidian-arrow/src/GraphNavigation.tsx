@@ -1,4 +1,4 @@
-import { CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch } from "lucide-react";
+import { CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle } from "lucide-react";
 
 export default function GraphNavigation() {
   return (
@@ -9,6 +9,9 @@ export default function GraphNavigation() {
       <a href="/viewer/"><FileText size={18} aria-hidden="true" />Viewer</a>
       <a href="/?view=validation"><ClipboardCheck size={18} aria-hidden="true" />Validation</a>
       <a href="/?view=api"><ClipboardList size={18} aria-hidden="true" />API</a>
+      <a className="shortcut-help-button" href="/?shortcuts=1" target="_blank" rel="noopener" aria-label="Keyboard shortcuts">
+        <HelpCircle size={18} aria-hidden="true" />Shortcuts
+      </a>
     </nav>
   );
 }

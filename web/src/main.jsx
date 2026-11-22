@@ -25,7 +25,7 @@ function viewFromLocation() {
 function App() {
   const [activeTab, setActiveTab] = useState(viewFromLocation);
   const [requestedCardId, setRequestedCardId] = useState("");
-  const [isShortcutReferenceOpen, setIsShortcutReferenceOpen] = useState(false);
+  const [isShortcutReferenceOpen, setIsShortcutReferenceOpen] = useState(() => new URLSearchParams(window.location.search).get("shortcuts") === "1");
 
   useEffect(() => {
     function restoreView() {
