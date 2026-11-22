@@ -1,0 +1,74 @@
+name: Publish k3s release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: k3s-release-${{ github.ref }}
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release tag
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git merge-base --is-ancestor HEAD origin/main
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            printf 'Release %s already exists. Publish a new version instead.\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        with:
+          version: v1.34.1
+
+      - name: Publish multi-architecture images
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          printf '%s\n' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          registry="ghcr.io/${GITHUB_REPOSITORY,,}"
+          for target in web api viewer; do
+            image="$registry-$target"
+            docker buildx build --target "$target" --platform linux/amd64,linux/arm64 \
+              --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --tag "$image:$RELEASE_TAG" --metadata-file "$RUNNER_TEMP/$target.json" --push .
+            digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/$target.json")
+            printf '%s\n' "$image@$digest" > "$RUNNER_TEMP/$target.image"
+          done
+
+      - name: Package deployment overlay
+        run: |
+          python3 deploy/k3s/package-release.py "$RELEASE_TAG" "$RUNNER_TEMP" \
+            "$(cat "$RUNNER_TEMP/web.image")" "$(cat "$RUNNER_TEMP/api.image")" \
+            "$(cat "$RUNNER_TEMP/viewer.image")"
+
+      - name: Publish GitHub release
+        run: |
+          artifact="day-planner-k3s-$RELEASE_TAG.tar.gz"
+          gh release create "$RELEASE_TAG" "$RUNNER_TEMP/$artifact" "$RUNNER_TEMP/$artifact.sha256" \
+            --verify-tag --generate-notes

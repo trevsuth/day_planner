@@ -29,3 +29,15 @@ def test_health_returns_503_when_database_is_unavailable(monkeypatch):
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Database connection failed."}
+
+
+def test_liveness_stays_available_when_database_is_unreachable(monkeypatch):
+    def check_connection():
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(api, "check_connection", check_connection)
+
+    response = TestClient(api.app).get("/api/livez")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

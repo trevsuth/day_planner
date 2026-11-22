@@ -1,0 +1,27 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../k3s
+
+images:
+  - name: daily-planner-web
+    newName: registry.example.com/daily-planner-web
+    newTag: YOUR_RELEASE_TAG
+  - name: daily-planner-api
+    newName: registry.example.com/daily-planner-api
+    newTag: YOUR_RELEASE_TAG
+  - name: markdown-viewer
+    newName: registry.example.com/markdown-viewer
+    newTag: YOUR_RELEASE_TAG
+
+patches:
+  - target:
+      kind: Ingress
+      name: daily-planner
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: planner.example.com
+  # Enable after setting the hostname and TLS secret in ingress-https.yaml.
+  # - path: ingress-https.yaml

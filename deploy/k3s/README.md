@@ -16,53 +16,113 @@ the same namespace, database secret, and Postgres StatefulSet. The existing
 `daily-planner` Deployment becomes the web shell. The API and Viewer have their
 own Deployments and Services.
 
-Before applying it, replace these placeholders:
+## First installation
 
-- The three image references in `kustomization.yaml`. Use a unique tag when publishing an image.
-- `planner.example.com` in `ingress.yaml`
-- `change-me` values in `secret.yaml`
+Use a reachable k3s cluster, a kubectl context with permission to deploy the
+suite, a default StorageClass, and a hostname that resolves to the ingress. The
+setup commands also use `just`, Bash, OpenSSL, and curl.
 
-Build and push each image from the repository root after authenticating to the
-registry. Match the tags in `kustomization.yaml` and the platform to the target
-nodes. Use `linux/arm64` for ARM64 nodes or `linux/amd64` for x86-64 nodes.
+1. Download `day-planner-k3s-<version>.tar.gz` and its matching checksum from
+   [GitHub Releases](https://github.com/trevsuth/day_planner/releases). From the
+   download directory, validate and extract the archive:
 
-```bash
-just k3s-publish registry.example.com/daily-planner-web:YOUR_RELEASE_TAG linux/arm64 web
-just k3s-publish registry.example.com/daily-planner-api:YOUR_RELEASE_TAG linux/arm64 api
-just k3s-publish registry.example.com/markdown-viewer:YOUR_RELEASE_TAG linux/arm64 viewer
-```
+   ```bash
+   release=vX.Y.Z
+   shasum -a 256 -c "day-planner-k3s-$release.tar.gz.sha256"
+   tar -xzf "day-planner-k3s-$release.tar.gz"
+   cd "day-planner-k3s-$release"
+   ```
 
-Check `kubectl config current-context` before deploying. Then render and apply:
+   Set `release` to the downloaded version. The package includes the
+   manifests and the image digests for both AMD64 and ARM64. If the GHCR
+   packages are private, configure pull credentials on your cluster.
 
-```bash
-just k3s-render
-just k3s-apply
-```
+2. Run `kubectl config get-contexts` and choose the context for this install.
+   Copy the release overlay and edit its `kustomization.yaml` to set your host:
 
-Check rollout:
+   ```bash
+   cp -R deploy/k3s-overlays/example deploy/k3s-overlays/local
+   ```
 
-```bash
-just k3s-rollout
-just k3s-status
-```
+   Choose one of the [access configurations](#access-configuration) before
+   opening the service to users. Leave the release image digests pinned.
 
-Open `/`, `/graph/`, and `/viewer/` on the configured host after rollout. Use an ingress
-reachable only by the intended users through your private network or existing
-access controls.
+3. Set `K3S_CONTEXT` to the context name you chose and `SUITE_URL` to the
+   configured ingress URL. Then initialize, preview, and apply. Initialization
+   generates a database password on a fresh install and reuses the existing
+   secret on upgrades. Apply performs a server-side dry run before writing.
+
+   ```bash
+   just k3s-init-db "$K3S_CONTEXT"
+   just k3s-render deploy/k3s-overlays/local
+   just k3s-apply "$K3S_CONTEXT"
+   just k3s-rollout "$K3S_CONTEXT"
+   just k3s-status "$K3S_CONTEXT"
+   just k3s-smoke "$SUITE_URL"
+   ```
+
+   The smoke check verifies Planner, Graph, Viewer, and database connectivity
+   through the same hostname users open. If you require authentication, run
+   the check through an authorized access path. If rollout fails, check pod and
+   volume status with `just k3s-status "$K3S_CONTEXT"` and API logs with
+   `just k3s-logs "$K3S_CONTEXT"`.
+
+## Access configuration
+
+- **Private network.** The example uses Traefik's HTTP entrypoint. Use it on a
+  trusted private network or behind a proxy that provides HTTPS and
+  authentication. Keep the cluster ingress unreachable from untrusted networks
+  if that proxy is the access boundary.
+- **Traefik HTTPS.** Create a TLS Secret named `daily-planner-tls` in the
+  `daily-planner` namespace, or set the name of an existing Secret. In the
+  local overlay, set the same hostname in `ingress-https.yaml` and
+  `kustomization.yaml`, then uncomment the HTTPS patch. If deployment
+  needs user authentication, also enable the middleware annotation and
+  name your existing ForwardAuth middleware. It applies to the entire ingress,
+  including the API and Graph attachment downloads. Configure HTTP-to-HTTPS
+  redirection on Traefik if you want to accept requests on both ports.
+  [Traefik Kubernetes Ingress configuration](https://doc.traefik.io/traefik/routing/providers/kubernetes-ingress/)
+
+## Publish a release
+
+From the source repository, tag a tested commit on `main` with a new
+`vMAJOR.MINOR.PATCH` tag. Pushing the tag starts the release workflow. After
+CI passes, it publishes the web, API, and Viewer images to GHCR and uploads the
+digest-pinned deployment archive and checksum to GitHub Releases. For
+anonymous installs, verify that users can pull all three packages without
+credentials. For private packages, document how installers obtain their
+registry access.
+
+For development builds or a private fork, use
+`just k3s-publish IMAGE PLATFORM TARGET` from the source checkout. Set the
+three image references in your own overlay.
+
+## Upgrade an existing installation
+
+Keep the namespace, hostname, Postgres volume, and database secret. Take a
+database backup to another machine before upgrading. Keep a copy of your
+current overlay, then copy the new release's image references into the overlay
+for the new package version. Keep your hostname and access settings. Apply the
+overlay and rerun the rollout and smoke checks.
+
+To roll back application images, apply the previous release with the previous
+image references. If a release changes the database schema incompatibly, follow
+its release notes and restore the matching backup to a fresh database before
+cutover. Recovering an older backup also discards writes made after that backup.
 
 ### Adding a tool
 
 1. Choose a URL prefix and build the tool's assets for that prefix. Viewer
    uses `/viewer/` and the `viewer` target in the root Dockerfile.
 2. Add the image and service to Compose. Add a Service, Deployment, image
-   reference, and prefix route under `deploy/k3s/`. Add the same proxy route
+   reference in your overlay, and a prefix route under `deploy/k3s/`. Add the same proxy route
    to `deploy/nginx/web.conf` for Compose and local port forwarding.
 3. Add a navigation link and verify that the tool opens directly and through
    navigation. If it needs persistence, add an API router and keep the database
    connection in the API service.
 
 To release Viewer on its own, publish only the `viewer` target, update its
-image tag, and run `just k3s-apply`. Use `just k3s-logs markdown-viewer` for its
+image tag, and run `just k3s-apply "$K3S_CONTEXT"`. Use `just k3s-logs "$K3S_CONTEXT" markdown-viewer` for its
 logs. The web and API image tags can stay pinned.
 
 ### Move an existing graph
@@ -71,7 +131,7 @@ Open Graph’s **Document** menu to find its import and export actions.
 
 1. If you saved data in the browser at the current hosted URL before the
    storage upgrade, use **Export old browser graph** at that URL and skip to
-   step 3. Otherwise, use the [standalone Graph setup](../../obsidian-arrow/README.md)
+   step 3. Otherwise, use the [standalone Graph setup](https://github.com/trevsuth/day_planner/blob/main/obsidian-arrow/README.md)
    and open Graph on its original browser origin using the same protocol,
    hostname, and port where the graph was saved. For the root Compose stack
    this is usually `http://localhost:8081`. If you used the standalone stack
@@ -90,21 +150,36 @@ recover references to them. Removing an attachment from the graph does not
 reclaim its database storage. Use **Export backup** for an additional portable
 copy of the active graph and its files.
 
-Follow app logs with `just k3s-logs`. The render and apply helpers wrap these
-commands:
+## Back up and rehearse recovery
+
+The nightly job stores copies on its backup volume. On a cluster with
+node-local storage, keep an additional copy outside the node. From a separate
+machine with kubectl access, run:
 
 ```bash
-kubectl kustomize deploy/k3s
-kubectl apply -k deploy/k3s
+just k3s-backup "$K3S_CONTEXT" "daily-planner-$(date -u +%Y%m%dT%H%M%SZ).dump"
 ```
 
-To verify a backup, restore into a separate test database first and check the
-graph and an attachment. The commands below replace data in the live database:
+This streams a complete Postgres archive into a new file on that machine. It
+includes the hosted Graph and its attachments. Schedule it from your backup
+host if you want regular off-node copies. Protect the archive as you would the
+database itself.
+
+For a restore rehearsal, use a disposable cluster or database. For example,
+with the Postgres client tools installed and a connection to a disposable
+server:
 
 ```bash
-kubectl -n daily-planner cp daily-planner.dump postgres-0:/tmp/daily-planner.dump
-kubectl -n daily-planner exec -it postgres-0 -- sh -c \
-  'export PGPASSWORD="$POSTGRES_PASSWORD"; pg_restore --clean --if-exists --host=127.0.0.1 --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" /tmp/daily-planner.dump'
+createdb --maintenance-db="$RESTORE_SERVER_URL" daily_planner_restore
+pg_restore --exit-on-error --dbname="$RESTORE_DATABASE_URL" daily-planner.dump
 ```
 
-Monitoring belongs in cluster infrastructure. This app exposes `/api/health` for readiness, liveness, and blackbox checks. Add Prometheus/Grafana/Loki or similar from your k3s infra repo, then point it at the app service or ingress.
+Set `RESTORE_DATABASE_URL` to the new `daily_planner_restore` database, then
+connect a test instance of the API to it. Open a restored planner entry,
+project card, and graph. Download a Graph attachment and verify its contents.
+Before going live, rehearse a fresh install, an upgrade, and an application
+rollback using a disposable namespace or cluster and sample data.
+
+Use `/api/health` for database readiness and external checks. The API's
+liveness endpoint, `/api/livez`, stays available during a temporary database
+outage so Kubernetes can pause traffic without restarting the API.

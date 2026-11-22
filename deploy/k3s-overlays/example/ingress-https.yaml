@@ -1,0 +1,14 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: daily-planner
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Attach your existing authentication middleware here.
+    # traefik.ingress.kubernetes.io/router.middlewares: daily-planner-suite-auth@kubernetescrd
+spec:
+  tls:
+    - hosts:
+        - planner.example.com
+      secretName: daily-planner-tls

@@ -45,14 +45,18 @@ spec:
                 - -c
                 - |
                   set -eu
+                  umask 077
                   timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                  partial=$(mktemp "/backups/.daily-planner-${timestamp}.XXXXXX")
+                  trap 'rm -f "$partial"' EXIT
                   export PGPASSWORD="$POSTGRES_PASSWORD"
                   pg_dump \
                     --host=postgres \
                     --username="$POSTGRES_USER" \
                     --dbname="$POSTGRES_DB" \
                     --format=custom \
-                    --file="/backups/daily-planner-${timestamp}.dump"
+                    --file="$partial"
+                  mv "$partial" "/backups/daily-planner-${timestamp}.dump"
                   find /backups -name 'daily-planner-*.dump' -mtime +14 -delete
               volumeMounts:
                 - name: backups

@@ -138,31 +138,47 @@ host-ps:
     {{container_compose}} --profile legacy-graph ps --all
 
 # Render the k3s manifests with kustomize
-k3s-render:
-    kubectl kustomize deploy/k3s
+k3s-render overlay="deploy/k3s-overlays/example":
+    kubectl kustomize {{quote(overlay)}}
 
-# Apply the k3s manifests
-k3s-apply:
-    kubectl apply -k deploy/k3s
+# Create the database secret or reuse the existing one in a named context
+k3s-init-db context:
+    bash deploy/k3s/setup.sh init-db {{quote(context)}}
+
+# Validate the configured k3s overlay with a server-side dry run
+k3s-preflight context overlay="deploy/k3s-overlays/local":
+    bash deploy/k3s/setup.sh preflight {{quote(context)}} {{quote(overlay)}}
+
+# Apply the configured k3s overlay to a named context
+k3s-apply context overlay="deploy/k3s-overlays/local": (k3s-preflight context overlay)
+    kubectl --context {{quote(context)}} apply -k {{quote(overlay)}}
 
 # Build and push an image target (web, api, or viewer) for the cluster's platform
 k3s-publish image platform target="web":
     docker buildx build --target {{quote(target)}} --platform {{quote(platform)}} --tag {{quote(image)}} --push .
 
 # Show k3s deployment status
-k3s-status:
-    kubectl -n {{k3s_namespace}} get ingress,services,deployments,statefulsets,pods,pvc,cronjobs
+k3s-status context:
+    kubectl --context {{quote(context)}} -n {{k3s_namespace}} get ingress,services,deployments,statefulsets,pods,pvc,cronjobs
 
 # Wait for Postgres, API, web, and Viewer to roll out
-k3s-rollout:
-    kubectl -n {{k3s_namespace}} rollout status statefulset/postgres --timeout=5m
-    kubectl -n {{k3s_namespace}} rollout status deployment/daily-planner-api --timeout=5m
-    kubectl -n {{k3s_namespace}} rollout status deployment/daily-planner --timeout=5m
-    kubectl -n {{k3s_namespace}} rollout status deployment/markdown-viewer --timeout=5m
+k3s-rollout context:
+    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status statefulset/postgres --timeout=5m
+    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status deployment/daily-planner-api --timeout=5m
+    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status deployment/daily-planner --timeout=5m
+    kubectl --context {{quote(context)}} -n {{k3s_namespace}} rollout status deployment/markdown-viewer --timeout=5m
 
 # Follow logs for a suite deployment
-k3s-logs deployment="daily-planner-api":
-    kubectl -n {{k3s_namespace}} logs -f deployment/{{quote(deployment)}}
+k3s-logs context deployment="daily-planner-api":
+    kubectl --context {{quote(context)}} -n {{k3s_namespace}} logs -f deployment/{{quote(deployment)}}
+
+# Verify Planner, Graph, Viewer, and API through the public URL
+k3s-smoke url:
+    bash deploy/k3s/smoke.sh {{quote(url)}}
+
+# Export a complete Postgres backup from k3s to a new local file
+k3s-backup context file:
+    bash deploy/k3s/backup.sh {{quote(context)}} {{quote(file)}}
 
 # Export hosted Planner and Projects data to JSON on this machine
 host-backup file="daily-planner-backup.json":

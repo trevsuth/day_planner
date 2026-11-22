@@ -10,6 +10,7 @@ web/dist/
 web/playwright-report/
 web/test-results/
 daily-planner-backup.json
+deploy/k3s-overlays/local/
 
 # Virtual environments
 .venv
