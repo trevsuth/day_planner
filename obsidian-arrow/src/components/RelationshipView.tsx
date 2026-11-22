@@ -29,7 +29,7 @@ export default function RelationshipView({
         y1={fromNode.y}
         x2={toNode.x}
         y2={toNode.y}
-        stroke={selected ? "#ff3fb7" : relationship.style.stroke}
+        stroke={selected ? "var(--text)" : relationship.style.stroke}
         strokeWidth={selected ? relationship.style.width + 2 : relationship.style.width}
         strokeDasharray={relationship.style.dashed ? "7 6" : undefined}
         markerEnd="url(#arrowhead)"
@@ -42,7 +42,7 @@ export default function RelationshipView({
         height="22"
         rx="4"
         fill="rgba(3, 12, 25, 0.86)"
-        stroke={selected ? "#ff3fb7" : "#38e8ff"}
+        stroke={selected ? "var(--text)" : "var(--line-strong)"}
       />
       <text x={midX} y={midY + 4} textAnchor="middle" fontSize="11" fill="#d9fbff">
         {relationship.type}

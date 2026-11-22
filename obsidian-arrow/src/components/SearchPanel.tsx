@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { Search } from "lucide-react";
 import type { SearchFilters, SearchResult } from "../lib/search";
 import type { NodeContentType } from "../types/graph";
 
@@ -30,15 +31,19 @@ export default function SearchPanel({
   const hasSearch = Boolean(query.trim()) || filters.labels.length > 0 || filters.tags.length > 0 || filters.contentTypes.length > 0;
 
   return (
-    <section className="search-panel">
-      <input
-        id="graph-search"
-        ref={inputRef}
-        type="search"
-        value={query}
-        placeholder="Search graph wiki"
-        onChange={(event) => onQueryChange(event.target.value)}
-      />
+    <section className="search-panel" aria-label="Graph search and filters">
+      <label className="graph-search-field">
+        <Search size={16} aria-hidden="true" />
+        <input
+          aria-label="Search Graph"
+          id="graph-search"
+          ref={inputRef}
+          type="search"
+          value={query}
+          placeholder="Title, content, labels, or tags"
+          onChange={(event) => onQueryChange(event.target.value)}
+        />
+      </label>
       <details className="search-filters">
         <summary>Filters</summary>
         <div className="filter-group">

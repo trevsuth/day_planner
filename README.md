@@ -1,6 +1,6 @@
 # Daily Planner
 
-A simple daily planner and project management app with a Python [Textual](https://textual.textualize.io/) TUI and a React web frontend. The planner is inspired by the layout of the Sidekick planner and gives each day a schedule, priorities, tasks, and notes.
+A daily planner, project workspace, visual wiki, and Markdown and Mermaid viewer. The web app brings together Planner, Projects, Graph, and Viewer. The Python [Textual](https://textual.textualize.io/) TUI provides access to Planner and Projects. The planner is inspired by the Sidekick layout and gives each day a schedule, priorities, tasks, and notes.
 
 ## Features
 
@@ -22,6 +22,41 @@ A simple daily planner and project management app with a Python [Textual](https:
 - Docker Compose hosting with a persisted Postgres database
 - Optional standalone executable build with PyInstaller
 
+## Graph
+
+Open **Graph** from the web navigation or go directly to `/graph/`. Use it to
+organize notes and reference material as nodes, then draw relationships to show
+how they connect.
+
+- Write node content in Markdown, link to other nodes, and follow backlinks.
+- Attach reference files and find nodes by title, content, label, or tag.
+- Pan and zoom the canvas, use the minimap, and arrange groups of nodes in a grid or circle.
+
+Hosted Graph autosaves one shared graph and its attachments to Postgres. Open
+the same deployment from another browser to pick up where you left off. If a
+stale tab tries to save over a newer revision, Graph asks you to export your
+edits and reload. The standalone version stores data in the browser.
+
+The workspace summary shows node, relationship, and selection counts. Use the
+search and filters above the canvas to find nodes. Open **Document** to rename
+the graph or find the import, export, and backup actions. Use
+**Export backup** to make a portable copy with attachment files and **Import JSON**
+to bring it into a deployment. **Export JSON** carries the graph
+and attachment metadata. Hosted attachments can be up to 10 MiB each, and a
+single save or import request can be up to 24 MiB. See the
+[migration steps](deploy/k3s/README.md#move-an-existing-graph) for existing graphs.
+
+## Markdown and Mermaid Viewer
+
+Open **Viewer** from the web navigation or go to `/viewer/`. Paste Markdown
+or open a local `.md` file to see a live preview. Use a `mermaid` or `mmd`
+fenced code block to embed a diagram in Markdown. To preview a diagram on its
+own, select **Mermaid** or open an `.mmd` or `.mermaid` file.
+
+The viewer renders in the browser and does not upload or save your source.
+Raw HTML and external images are disabled in the preview. Keep your source in
+a local file if you want to use it again.
+
 ## Screenshots
 
 ![Planner day view](docs/screenshots/planner.png)
@@ -34,6 +69,12 @@ A simple daily planner and project management app with a Python [Textual](https:
 
 ![Keyboard shortcut reference](docs/screenshots/shortcuts.png)
 
+![Graph canvas showing linked launch planning notes and a minimap](docs/screenshots/graph-canvas.png)
+
+![Graph wiki showing the selected launch plan with a Markdown preview](docs/screenshots/graph-wiki.png)
+
+![Viewer showing Markdown source alongside its rendered text and Mermaid workflow](docs/screenshots/viewer.png)
+
 ## Quickstart
 
 ### Local Container Hosting
@@ -42,26 +83,21 @@ On another computer with Docker or Podman installed:
 
 ```bash
 cp .env.example .env
-just host-start daily-planner
+just host-start
 ```
 
-Open Daily Planner at `http://localhost:8080` and Obsidian Arrow at
-`http://localhost:8080/graph/`. For standalone Graph or to recover existing
-browser data, run `just host-start obsidian-arrow` and open
-`http://localhost:8081`. Set `ARROWSAPP_PORT` in `.env` to change its port.
-Graph data is specific to each
-browser origin. Use **Export backup** at the old origin and **Import JSON** at
-the new one to move the graph and its attachment files.
-See the [Obsidian Arrow README](obsidian-arrow/README.md) for standalone setup
-and development commands.
+Open `http://localhost:8080` and use the top navigation. Graph is also
+available directly at `/graph/` and Viewer at `/viewer/`. If you used Graph on a different port or
+hostname, follow the [graph migration steps](deploy/k3s/README.md#move-an-existing-graph)
+to bring over your graph and attachments.
 
-`just host-start` starts services in the background. With no service arguments
-it starts all three services. Use `just host-up` for a foreground run,
-`just host-ps` for status, and `just host-logs daily-planner` to follow app logs.
-Docker Compose is the default. To start the combined app with Podman Compose:
+`just host-start` starts four services in the background. Use `just host-up`
+for a foreground run, `just host-ps` for status, and
+`just host-logs daily-planner-api` to follow API logs. Docker Compose is the
+default. To start the suite with Podman Compose:
 
 ```bash
-CONTAINER_COMPOSE='podman compose' just host-start daily-planner
+CONTAINER_COMPOSE='podman compose' just host-start
 ```
 
 Docker-specific shortcuts are also available:
@@ -70,7 +106,10 @@ Docker-specific shortcuts are also available:
 just docker-up
 ```
 
-Each computer gets its own Postgres database in that computer's local named volume, `daily_planner_postgres_data`. To stop the app while keeping the database:
+Each computer uses its own Postgres volume. When upgrading from the combined
+image, run `just host-down` and then `just host-start` from the same checkout
+and Compose project so the services reuse that volume. To stop the suite while
+keeping the database:
 
 ```bash
 just host-down
@@ -98,13 +137,13 @@ DAILY_PLANNER_PORT=8082
 Without `just`, run the compose tool directly:
 
 ```bash
-docker compose up --build -d daily-planner
+docker compose up --build -d
 ```
 
 or:
 
 ```bash
-podman compose up --build -d daily-planner
+podman compose up --build -d
 ```
 
 ### Local Development
@@ -123,9 +162,10 @@ just dev
 ```
 
 Open `http://127.0.0.1:5173/` and use the top navigation to switch between
-Planner, Projects, and Graph. `just dev` builds the hosted Graph bundle before
-starting FastAPI and Vite. After editing Graph code, run `just graph-build`
-to refresh the bundle, or use `just graph-dev` for standalone hot reload.
+Planner, Projects, Graph, and Viewer. `just dev` builds Graph and Viewer before
+starting FastAPI and Vite. After editing either tool, run `just graph-build`
+or `just viewer-build` to refresh its bundle. For standalone hot reload, use
+`just graph-dev` or `just viewer-dev`.
 Press `Ctrl+C` to stop both development servers.
 
 To run the terminal planner instead:
@@ -142,9 +182,9 @@ just
 
 ### k3s Deployment
 
-The k3s deployment serves Daily Planner at `/` and Obsidian Arrow at `/graph/`
-from the same image and ingress. The manifests include a Postgres StatefulSet,
-persisted storage, and a nightly `pg_dump` backup CronJob. See the
+The k3s deployment serves the web shell, API, and Viewer through one ingress.
+The manifests include a Postgres StatefulSet, persisted storage, and a nightly
+`pg_dump` backup CronJob. See the
 [k3s deployment guide](deploy/k3s/README.md) for image rollout and graph migration.
 
 Before deploying, set the real image, hostname, and database secret values in `deploy/k3s`, then apply the kustomize base:
@@ -161,7 +201,7 @@ Cluster-wide monitoring should be managed outside this repo. The app exposes `/a
 - Python 3.13 or newer
 - Postgres 17 or newer, or Docker/Podman Compose for the included Postgres service
 - [uv](https://docs.astral.sh/uv/) for dependency management
-- Node.js 22 and npm for both frontends
+- Node.js 22.12 or newer and npm for the frontends
 - Optional: [just](https://github.com/casey/just) for the included task shortcuts
 
 ## Local Data
@@ -201,9 +241,11 @@ just web-unit
 just web-test
 ```
 
-The frontend typecheck currently covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build both frontends, start an isolated local API server, and set `DATABASE_SCHEMA` so test tables stay separate from local application data.
+The frontend typecheck covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build all three bundles, start an isolated local API server, and set `DATABASE_SCHEMA` so test tables stay separate from local application data.
 
-Capture README screenshots from isolated demo data:
+With Postgres running (`just db-up` for local Compose), capture README
+screenshots from isolated demo data. The recipe uses `TEST_DATABASE_URL` when
+set and otherwise uses `DATABASE_URL`:
 
 ```bash
 just screenshots
@@ -241,6 +283,10 @@ just host-backup backups/hosted.json
 just host-restore backups/hosted.json
 ```
 
+These JSON recipes cover Planner and Projects. Use **Export backup** for a
+portable Graph copy. A full Postgres dump, including the k3s nightly backup,
+covers all three tools and hosted attachment bytes.
+
 ## API
 
 The web frontend talks to the FastAPI app through these endpoints:
@@ -251,6 +297,9 @@ The web frontend talks to the FastAPI app through these endpoints:
 | `PUT` | `/api/planner/entries/{entry_date}` | Save a planner entry for that date |
 | `PUT` | `/api/planner/card-assignments/{card_id}` | Assign or move a card into a dated planner priority slot |
 | `DELETE` | `/api/planner/card-assignments/{card_id}` | Remove a linked card assignment from the planner |
+| `GET` | `/api/graphs/workspace` | Load the shared graph and its current revision |
+| `PUT` | `/api/graphs/workspace` | Save a graph and any new files using the current revision |
+| `GET` | `/api/graphs/workspace/attachments/{key}` | Download a stored attachment |
 | `GET` | `/api/projmgmt/projects` | List projects |
 | `POST` | `/api/projmgmt/projects` | Create a project |
 | `DELETE` | `/api/projmgmt/projects/{project_id}` | Delete a project and its cards |
@@ -282,9 +331,18 @@ Project hierarchy, dependency, and schedule-warning rules are implemented server
 
 ## Platform Notes
 
-FastAPI and Textual use Postgres as the source of truth for Planner and
-Projects. The hosted app serves both React frontends. Graph uses browser-local
-storage, so Graph backups are managed separately from Postgres backups.
+| Service | Public routes | Responsibility |
+| --- | --- | --- |
+| `daily-planner` | `/`, `/?view=projects`, `/graph/` | Web shell and the Planner, Projects, and Graph frontends |
+| `daily-planner-api` | `/api/`, `/docs`, `/openapi.json` | Unified FastAPI service for Planner, Projects, and Graph |
+| `markdown-viewer` | `/viewer/` | Independently buildable and deployable static viewer |
+| `postgres` | — | Stores Planner, Projects, Graph, and Graph attachment data |
+
+The web shell routes requests in Compose. k3s uses a shared ingress for the
+same URLs. The Textual client uses the Planner and Projects service modules.
+To deploy a Viewer change locally, run `just host-start markdown-viewer`.
+See [Adding a tool](deploy/k3s/README.md#adding-a-tool) for the routing and
+deployment pattern.
 
 ## Controls
 
@@ -401,10 +459,12 @@ Available `just` recipes:
 | `just backup [file]` | Export local planner and project data to portable JSON |
 | `just restore [file]` | Replace local data from a portable JSON backup |
 | `just migrate-sqlite [planner_db] [project_db]` | Import existing SQLite databases into Postgres |
-| `just dev` | Build hosted Graph and run FastAPI and Planner Vite |
+| `just dev` | Build Graph and Viewer, then run FastAPI and Planner Vite |
 | `just graph-dev` | Run Graph by itself with hot reload |
 | `just graph-build` | Build Graph for the shared `/graph/` route |
-| `just frontend-build` | Build both hosted frontends |
+| `just viewer-dev` | Run Viewer with Vite hot reload |
+| `just viewer-build` | Build Viewer for `/viewer/` |
+| `just frontend-build` | Build the web shell, Graph, and Viewer |
 | `just host-start [services…]` | Build and start Compose services in the background |
 | `just host-up [services…]` | Build and run Compose services in the foreground |
 | `just host-down` | Stop the hosted container app |
@@ -412,14 +472,14 @@ Available `just` recipes:
 | `just host-build [services…]` | Build Compose service images |
 | `just host-logs [services…]` | Follow Compose logs |
 | `just host-ps` | Show running and stopped Compose containers |
-| `just k3s-publish IMAGE PLATFORM` | Build and push a tagged app image for the target platform |
-| `just k3s-rollout` | Wait for Postgres and the combined app |
-| `just k3s-logs` | Follow the combined app deployment logs |
+| `just k3s-publish IMAGE PLATFORM [target]` | Build and push the `web`, `api`, or `viewer` target. Defaults to `web` |
+| `just k3s-rollout` | Wait for Postgres, API, web, and Viewer |
+| `just k3s-logs [deployment]` | Follow deployment logs. Defaults to the API |
 | `just k3s-render` | Render the k3s manifests with kustomize |
 | `just k3s-apply` | Apply the k3s manifests |
 | `just k3s-status` | Show k3s deployment status |
-| `just host-backup [file]` | Export data from the running hosted container |
-| `just host-restore [file]` | Replace data in the running hosted container from backup |
+| `just host-backup [file]` | Export hosted Planner and Projects data to JSON |
+| `just host-restore [file]` | Replace hosted Planner and Projects data from JSON |
 | `just docker-up` | Build and run the Docker Compose hosted app |
 | `just docker-down` | Stop the Docker Compose hosted app |
 | `just docker-reset` | Stop Docker Compose and remove its local database volume |
@@ -444,7 +504,8 @@ Available `just` recipes:
 
 ```text
 app_planner/
-  api.py       FastAPI app, planner API, project routes, and static frontend serving
+  api.py       Unified FastAPI app and static frontend serving
+  routes.py    Planner API routes and compatibility URLs
   database.py  Postgres setup and persistence helpers
   models.py    Pydantic models for planner entries and tasks
   ui.css       Textual styles
@@ -453,14 +514,16 @@ app_projmgmt/
   api.py       Project management API routes
   database.py  Postgres setup and persistence helpers for projects and cards
   models.py    Pydantic models for projects, cards, statuses, and card types
+app_graph/     Graph API, revision checks, and Postgres storage
 tests/
   test_database.py
   test_projmgmt_database.py
 web/
   src/planner/  React planner view
   src/projects/ React project management view
-obsidian-arrow/ Graph frontend and standalone container setup
-deploy/k3s/     Combined app, Postgres, ingress, and backup manifests
+viewer/         Markdown and Mermaid viewer
+deploy/k3s/     Web, API, Viewer, Postgres, ingress, and backup manifests
+deploy/nginx/  Web shell proxy and static server configuration
 docker-compose.yml
 justfile
 planner.spec

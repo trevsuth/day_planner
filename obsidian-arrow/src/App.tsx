@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import GraphCanvas from "./components/GraphCanvas";
 import GraphMinimap from "./components/GraphMinimap";
+import GraphNavigation from "./GraphNavigation";
 import InspectorPanel from "./components/InspectorPanel";
 import SearchPanel from "./components/SearchPanel";
 import Toolbar from "./components/Toolbar";
@@ -32,20 +33,28 @@ import {
   deleteAttachmentFile,
   exportDocument,
   exportGraphBackup,
+  hasBrowserDocument,
   importGraphFile,
   loadAttachmentFile,
   loadDocument,
   saveAttachmentFile,
   saveDocument,
 } from "./lib/storage";
+import type { HostedGraphStorage } from "./lib/hostedStorage";
 import { getSearchFacets, searchNodes, type SearchFilters } from "./lib/search";
 import type { AttachedFile, GraphDocument, GraphNode, GraphRelationship, Selection } from "./types/graph";
 
 type SaveStatus = "saved" | "saving" | "error";
 
-export default function App() {
-  const [document, setDocument] = useState<GraphDocument>(() => loadDocument());
+type AppProps = { initialDocument?: GraphDocument; hostedStorage?: HostedGraphStorage };
+
+export default function App({ initialDocument, hostedStorage }: AppProps) {
+  const [document, setDocument] = useState<GraphDocument>(() => initialDocument ?? loadDocument());
+  const [browserBackupAvailable] = useState(() => Boolean(hostedStorage && hasBrowserDocument()));
   const documentRef = useRef(document);
+  const lastSavedDocument = useRef(initialDocument);
+  const saveInFlight = useRef<Promise<void> | null>(null);
+  const [saveAttempt, setSaveAttempt] = useState(0);
   const dragStartDocumentRef = useRef<GraphDocument | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
@@ -68,6 +77,37 @@ export default function App() {
 
   useEffect(() => {
     documentRef.current = document;
+    if (hostedStorage) {
+      if (lastSavedDocument.current === document && !saveInFlight.current) return;
+      setSaveState((current) => ({ status: "saving", savedAt: current.savedAt }));
+      let active = true;
+      const timer = window.setTimeout(async () => {
+        await saveInFlight.current?.catch(() => {});
+        if (!active) return;
+        if (lastSavedDocument.current === document) {
+          setSaveState({ status: "saved", savedAt: new Date().toISOString() });
+          return;
+        }
+        const save = hostedStorage.save(document);
+        saveInFlight.current = save;
+        try {
+          await save;
+          lastSavedDocument.current = document;
+          if (active) setSaveState({ status: "saved", savedAt: new Date().toISOString() });
+        } catch (error) {
+          if (active) {
+            setSaveState({ status: "error", error: error instanceof Error ? error.message : "Could not save document." });
+          }
+        } finally {
+          saveInFlight.current = null;
+        }
+      }, 450);
+      return () => {
+        active = false;
+        window.clearTimeout(timer);
+      };
+    }
+
     setSaveState((current) => ({ status: "saving", savedAt: current.savedAt }));
     try {
       const result = saveDocument(document);
@@ -78,7 +118,18 @@ export default function App() {
         error: error instanceof Error ? error.message : "Could not save document.",
       });
     }
-  }, [document]);
+  }, [document, hostedStorage, saveAttempt]);
+
+  useEffect(() => {
+    if (!hostedStorage) return;
+    function warnBeforeLeaving(event: BeforeUnloadEvent) {
+      if (lastSavedDocument.current === documentRef.current && !saveInFlight.current) return;
+      event.preventDefault();
+      event.returnValue = true;
+    }
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [hostedStorage]);
 
   function pushHistory(snapshot: GraphDocument) {
     setHistory((current) => ({
@@ -350,19 +401,20 @@ export default function App() {
     commitDocument((current) => updateNodesStyle(current, selectedNodeIds, patch));
   }
 
-  function downloadGraph(raw: string, suffix: string) {
+  function downloadGraph(raw: string, suffix: string, title = document.title) {
     const blob = new Blob([raw], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement("a");
     anchor.href = url;
-    anchor.download = `${document.title.replace(/\W+/g, "-").toLowerCase() || "graph-wiki"}${suffix}.json`;
+    anchor.download = `${title.replace(/\W+/g, "-").toLowerCase() || "graph-wiki"}${suffix}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
 
-  async function handleBackup() {
+  async function handleBackup(fromBrowser = false) {
     try {
-      downloadGraph(await exportGraphBackup(document), "-backup");
+      const source = fromBrowser ? loadDocument() : document;
+      downloadGraph(await exportGraphBackup(source, fromBrowser ? undefined : hostedStorage?.loadFile), "-backup", source.title);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Could not back up the graph.");
     }
@@ -371,7 +423,7 @@ export default function App() {
   async function handleImport(file: File) {
     try {
       const raw = await file.text();
-      const imported = await importGraphFile(raw);
+      const imported = await importGraphFile(raw, hostedStorage?.storeFiles);
       commitDocument(() => touchDocument(imported));
       setSelection(null);
       setPendingRelationshipFromId(null);
@@ -392,7 +444,8 @@ export default function App() {
     const attachment = createAttachmentFromFile(file);
 
     try {
-      await saveAttachmentFile(file, attachment);
+      if (hostedStorage) hostedStorage.storeFile(file, attachment);
+      else await saveAttachmentFile(file, attachment);
       commitDocument((current) =>
         updateNode(current, nodeId, (node) => ({
           ...node,
@@ -406,7 +459,7 @@ export default function App() {
 
   async function handleDownloadAttachment(attachment: AttachedFile) {
     try {
-      const blob = await loadAttachmentFile(attachment);
+      const blob = await (hostedStorage?.loadFile(attachment) ?? loadAttachmentFile(attachment));
       if (!blob) {
         window.alert("Attachment bytes are not available for this document.");
         return;
@@ -425,7 +478,7 @@ export default function App() {
 
   async function handleDeleteAttachment(nodeId: string, attachment: AttachedFile) {
     try {
-      await deleteAttachmentFile(attachment);
+      if (!hostedStorage) await deleteAttachmentFile(attachment);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Could not delete attachment bytes.");
       return;
@@ -440,21 +493,15 @@ export default function App() {
   }
 
   return (
-    <main className={import.meta.env.BASE_URL === "/graph/" ? "app-shell hosted" : "app-shell"}>
-      {import.meta.env.BASE_URL === "/graph/" && (
-        <nav className="app-tabs" aria-label="Application views">
-          <a href="/">Planner</a>
-          <a href="/?view=projects">Projects</a>
-          <a href="/graph/" aria-current="page">Graph</a>
-          <a href="/?view=api">API</a>
-        </nav>
-      )}
+    <main className="app-shell">
+      {hostedStorage && <GraphNavigation />}
       <Toolbar
         documentTitle={document.title}
         saveStatus={saveState.status}
         lastSavedAt={saveState.savedAt}
         saveError={saveState.error}
         pendingRelationship={Boolean(pendingRelationshipFromId)}
+        canDelete={Boolean(selection)}
         canUndo={history.past.length > 0}
         canRedo={history.future.length > 0}
         onTitleChange={(title) => commitDocument((current) => touchDocument({ ...current, title }))}
@@ -464,7 +511,9 @@ export default function App() {
         onUndo={handleUndo}
         onRedo={handleRedo}
         onExport={() => downloadGraph(exportDocument(document), "")}
-        onBackup={handleBackup}
+        onBackup={() => handleBackup()}
+        onBrowserBackup={browserBackupAvailable ? () => handleBackup(true) : undefined}
+        onRetrySave={hostedStorage ? () => setSaveAttempt((attempt) => attempt + 1) : undefined}
         onImport={handleImport}
         onReset={() => {
           commitDocument(() => createEmptyDocument());
@@ -473,18 +522,23 @@ export default function App() {
           setClipboard(null);
         }}
       />
+      <section className="graph-summary" aria-label="Graph summary">
+        <div><span>Nodes</span><strong>{document.nodes.length}</strong></div>
+        <div><span>Relationships</span><strong>{document.relationships.length}</strong></div>
+        <div><span>Selected nodes</span><strong>{selectedNodeIds.length}</strong></div>
+      </section>
+      <SearchPanel
+        query={query}
+        filters={searchFilters}
+        facets={searchFacets}
+        results={searchResults}
+        inputRef={searchInputRef}
+        onQueryChange={setQuery}
+        onFiltersChange={setSearchFilters}
+        onSelectNode={selectNode}
+      />
       <div className="workspace">
-        <section className="canvas-column">
-          <SearchPanel
-            query={query}
-            filters={searchFilters}
-            facets={searchFacets}
-            results={searchResults}
-            inputRef={searchInputRef}
-            onQueryChange={setQuery}
-            onFiltersChange={setSearchFilters}
-            onSelectNode={selectNode}
-          />
+        <section className="canvas-column" aria-label="Graph canvas">
           {recentNodeIds.length > 0 && (
             <nav className="breadcrumbs" aria-label="Recently visited nodes">
               {recentNodeIds
@@ -500,12 +554,6 @@ export default function App() {
           {pendingRelationshipFromId && (
             <div className="mode-banner">Select another node to complete the relationship.</div>
           )}
-          <GraphMinimap
-            document={document}
-            selectedNodeIds={selectedNodeIds}
-            highlightedNodeIds={highlightedNodeIds}
-            onSelectNode={selectNode}
-          />
           <GraphCanvas
             document={document}
             selection={selection}
@@ -545,22 +593,30 @@ export default function App() {
             }}
           />
         </section>
-        <InspectorPanel
-          selectedNode={selectedNode}
-          selectedRelationship={selectedRelationship}
-          document={document}
-          nodes={document.nodes}
-          selectedNodeCount={selectedNodeIds.length}
-          onUpdateNode={handleUpdateNode}
-          onUpdateRelationship={handleUpdateRelationship}
-          onAddAttachment={handleAddAttachment}
-          onDownloadAttachment={handleDownloadAttachment}
-          onDeleteAttachment={handleDeleteAttachment}
-          onDuplicateSelection={handleDuplicateSelected}
-          onLayoutSelection={handleLayoutSelected}
-          onUpdateSelectedNodeStyle={handleUpdateSelectedNodeStyle}
-          onSelectNode={selectNode}
-        />
+        <div className="workspace-sidebar">
+          <InspectorPanel
+            selectedNode={selectedNode}
+            selectedRelationship={selectedRelationship}
+            document={document}
+            nodes={document.nodes}
+            selectedNodeCount={selectedNodeIds.length}
+            onUpdateNode={handleUpdateNode}
+            onUpdateRelationship={handleUpdateRelationship}
+            onAddAttachment={handleAddAttachment}
+            onDownloadAttachment={handleDownloadAttachment}
+            onDeleteAttachment={handleDeleteAttachment}
+            onDuplicateSelection={handleDuplicateSelected}
+            onLayoutSelection={handleLayoutSelected}
+            onUpdateSelectedNodeStyle={handleUpdateSelectedNodeStyle}
+            onSelectNode={selectNode}
+          />
+          <GraphMinimap
+            document={document}
+            selectedNodeIds={selectedNodeIds}
+            highlightedNodeIds={highlightedNodeIds}
+            onSelectNode={selectNode}
+          />
+        </div>
       </div>
     </main>
   );

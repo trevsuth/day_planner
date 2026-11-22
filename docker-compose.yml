@@ -19,15 +19,26 @@ services:
   daily-planner:
     build:
       context: .
-    image: daily-planner:local
+      target: web
+    image: daily-planner-web:local
+    restart: unless-stopped
+    depends_on:
+      daily-planner-api:
+        condition: service_healthy
+    ports:
+      - "${DAILY_PLANNER_PORT:-8080}:8080"
+
+  daily-planner-api:
+    build:
+      context: .
+      target: api
+    image: daily-planner-api:local
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://daily_planner:daily_planner@postgres:5432/daily_planner
-    ports:
-      - "${DAILY_PLANNER_PORT:-8080}:8000"
     healthcheck:
       test:
         [
@@ -41,7 +52,15 @@ services:
       retries: 3
       start_period: 10s
 
+  markdown-viewer:
+    build:
+      context: .
+      target: viewer
+    image: markdown-viewer:local
+    restart: unless-stopped
+
   obsidian-arrow:
+    profiles: [legacy-graph]
     build:
       context: ./obsidian-arrow
     image: arrowsapp:local

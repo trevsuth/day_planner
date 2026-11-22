@@ -12,3 +12,5 @@ web/node_modules
 obsidian-arrow/dist
 obsidian-arrow/dist-hosted
 obsidian-arrow/node_modules
+viewer/dist
+viewer/node_modules

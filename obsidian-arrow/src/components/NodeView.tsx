@@ -26,6 +26,7 @@ export default function NodeView({
   onConnectorPointerDown,
   onClick,
 }: NodeViewProps) {
+  const accent = pendingRelationship ? "var(--amber)" : selected ? "var(--text)" : highlighted ? "#ffd166" : undefined;
   return (
     <g
       className="graph-node"
@@ -36,14 +37,14 @@ export default function NodeView({
       <circle
         r={node.style.radius}
         fill={node.style.fill}
-        stroke={selected ? "#ff3fb7" : pendingRelationship ? "#ff3fb7" : highlighted ? "#ffd166" : node.style.stroke}
+        stroke={accent ?? node.style.stroke}
         strokeWidth={selected || pendingRelationship || highlighted ? 4 : 2}
         filter="url(#holoGlow)"
       />
       <circle
         r={node.style.radius + 9}
         fill="none"
-        stroke={selected || pendingRelationship ? "#ff3fb7" : highlighted ? "#ffd166" : "#38e8ff"}
+        stroke={accent ?? "var(--line-strong)"}
         strokeOpacity={selected || pendingRelationship || highlighted ? 0.46 : 0.18}
         strokeWidth="1.5"
         strokeDasharray="5 8"
@@ -81,7 +82,7 @@ export default function NodeView({
             cy={cy}
             r="8"
             fill="#020711"
-            stroke={selected || pendingRelationship ? "#ff3fb7" : "#38e8ff"}
+            stroke={accent ?? "var(--line-strong)"}
             strokeWidth="2"
             onPointerDown={(event) => onConnectorPointerDown(event, node)}
           />

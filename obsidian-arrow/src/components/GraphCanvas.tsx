@@ -381,17 +381,20 @@ export default function GraphCanvas({
 
   return (
     <div className="graph-canvas-frame">
-      <div className="canvas-controls">
-        <button type="button" onClick={() => zoomAtCenter(0.82)}>
-          Zoom +
-        </button>
-        <button type="button" onClick={() => zoomAtCenter(1.18)}>
-          Zoom -
-        </button>
-        <button type="button" onClick={fitToGraph}>
-          Fit
-        </button>
-      </div>
+      <header className="graph-panel-header canvas-header">
+        <h2>Canvas</h2>
+        <div className="canvas-controls" role="group" aria-label="Canvas zoom">
+          <button type="button" onClick={() => zoomAtCenter(0.82)}>
+            Zoom +
+          </button>
+          <button type="button" onClick={() => zoomAtCenter(1.18)}>
+            Zoom -
+          </button>
+          <button type="button" onClick={fitToGraph}>
+            Fit
+          </button>
+        </div>
+      </header>
       <svg
         ref={svgRef}
         className="graph-canvas"
@@ -413,15 +416,15 @@ export default function GraphCanvas({
       >
         <defs>
           <radialGradient id="canvasGlow" cx="50%" cy="46%" r="66%">
-            <stop offset="0%" stopColor="#0f456a" stopOpacity="0.66" />
-            <stop offset="46%" stopColor="#071827" stopOpacity="0.96" />
-            <stop offset="100%" stopColor="#020711" stopOpacity="1" />
+            <stop offset="0%" stopColor="#12303c" />
+            <stop offset="46%" stopColor="#0b181f" />
+            <stop offset="100%" stopColor="#070c10" />
           </radialGradient>
           <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
-            <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#1ad7ff" strokeOpacity="0.13" strokeWidth="1" />
+            <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#5bd2ea" strokeOpacity="0.13" strokeWidth="1" />
           </pattern>
           <filter id="holoGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feGaussianBlur stdDeviation="1.5" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -455,14 +458,6 @@ export default function GraphCanvas({
           fill="url(#grid)"
           pointerEvents="none"
         />
-        <g className="holo-orbits" filter="url(#holoGlow)">
-          <circle cx="700" cy="450" r="150" />
-          <circle cx="700" cy="450" r="255" />
-          <circle cx="700" cy="450" r="380" />
-          <ellipse cx="700" cy="450" rx="520" ry="170" />
-          <line x1="0" y1="450" x2="1400" y2="450" />
-          <line x1="700" y1="0" x2="700" y2="900" />
-        </g>
         {alignmentGuides.x !== undefined && (
           <line className="alignment-guide" x1={alignmentGuides.x} y1={viewBox.y} x2={alignmentGuides.x} y2={viewBox.y + viewBox.height} />
         )}

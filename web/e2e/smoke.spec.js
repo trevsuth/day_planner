@@ -1,8 +1,35 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
-test("restores a hosted Graph backup with attachment bytes in a fresh browser profile", async ({ page, browser }) => {
+test("opens the Viewer and renders Markdown, Mermaid files, and diagram errors", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Application views" }).getByRole("link", { name: "Viewer" }).click();
+  await expect(page).toHaveURL(/\/viewer\/$/);
+  const source = page.getByLabel("Source", { exact: true });
+  const preview = page.getByRole("region", { name: "Preview" });
+  await source.fill("# Release notes\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n<strong>Raw HTML</strong>");
+  await expect(preview.getByRole("heading", { name: "Release notes" })).toBeVisible();
+  await expect(preview.getByText("<strong>Raw HTML</strong>")).toBeVisible();
+  const diagram = preview.getByRole("img", { name: "Mermaid diagram" });
+  await expect(diagram).toBeVisible();
+  await expect.poll(() => diagram.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+
+  await page.getByLabel("Open file").setInputFiles({
+    name: "workflow.mmd",
+    mimeType: "text/plain",
+    buffer: Buffer.from("sequenceDiagram\n  Alice->>Bob: Review"),
+  });
+  await expect(page.getByLabel("Format")).toHaveValue("mermaid");
+  await expect(diagram).toBeVisible();
+  await expect.poll(() => diagram.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  await source.fill("invalid diagram syntax");
+  await expect(preview.getByRole("alert")).toContainText("Could not render diagram");
+});
+
+test("shares Graph and its files across browsers and restores a portable backup", async ({ page, browser }) => {
   await page.goto("/graph/");
+  await page.locator(".document-actions summary").click();
+  await page.getByRole("button", { name: "New document" }).click();
   await page.getByRole("button", { name: "Add node" }).click();
   await page.getByText("Attached files", { exact: true }).click();
   const contents = Buffer.from([0, 17, 128, 255]);
@@ -12,23 +39,37 @@ test("restores a hosted Graph backup with attachment bytes in a fresh browser pr
     buffer: contents,
   });
   await expect(page.getByText("sample.bin", { exact: true })).toBeVisible();
+  await expect(page.locator(".save-status")).toHaveClass(/\bsaved\b/);
 
   const backupEvent = page.waitForEvent("download");
+  await page.locator(".document-actions summary").click();
   await page.getByRole("button", { name: "Export backup" }).click();
+  await page.keyboard.press("Escape");
   const backup = await backupEvent;
 
   const freshPage = await browser.newPage();
   try {
     await freshPage.goto(page.url());
-    await expect(freshPage.getByRole("button", { name: "Add node" })).toBeVisible();
-    await expect(freshPage.locator(".graph-node")).toHaveCount(0);
+    const node = freshPage.locator(".graph-node");
+    await expect(node).toHaveCount(1);
+    await node.click();
+    await freshPage.getByText("Attached files", { exact: true }).click();
+    const originalAttachment = freshPage.waitForEvent("download");
+    await freshPage.getByRole("button", { name: "Download", exact: true }).click();
+    expect(await readFile(await (await originalAttachment).path())).toEqual(contents);
+
+    await freshPage.locator(".document-actions summary").click();
+    await freshPage.getByRole("button", { name: "New document" }).click();
+    await expect(node).toHaveCount(0);
+    await expect(freshPage.locator(".save-status")).toHaveClass(/\bsaved\b/);
+    await freshPage.locator(".document-actions summary").click();
     await freshPage.getByLabel("Import JSON").setInputFiles({
       name: backup.suggestedFilename(),
       mimeType: "application/json",
       buffer: await readFile(await backup.path()),
     });
-    const node = freshPage.locator(".graph-node").first();
     await expect(node).toBeVisible();
+    await expect(freshPage.locator(".save-status")).toHaveClass(/\bsaved\b/);
     await freshPage.reload();
     await node.click();
     await freshPage.getByText("Attached files", { exact: true }).click();
@@ -36,9 +77,37 @@ test("restores a hosted Graph backup with attachment bytes in a fresh browser pr
     const attachmentEvent = freshPage.waitForEvent("download");
     await freshPage.getByRole("button", { name: "Download", exact: true }).click();
     expect(await readFile(await (await attachmentEvent).path())).toEqual(contents);
+
+    await page.locator(".document-actions summary").click();
+    await page.getByRole("textbox", { name: "Graph title" }).fill("Stale edit");
+    await expect(page.getByRole("alert")).toContainText("The graph changed in another browser");
+    await freshPage.reload();
+    await expect(freshPage.getByRole("heading", { level: 1 })).toHaveText("Local Graph Wiki");
   } finally {
     await freshPage.context().close();
   }
+});
+
+test("keeps Graph document actions and the inspector reachable on a narrow screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 740 });
+  await page.goto("/graph/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Graph summary" })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Search Graph" })).toBeVisible();
+  const actions = page.locator(".document-actions summary");
+  await actions.click();
+  const backup = page.getByRole("button", { name: "Export backup" });
+  await expect(backup).toBeInViewport();
+  await backup.focus();
+  await page.keyboard.press("Escape");
+  await expect(backup).toBeHidden();
+  await expect(actions).toBeFocused();
+  await page.getByRole("button", { name: "Add node" }).click();
+  const title = page.getByLabel("Title", { exact: true });
+  await title.scrollIntoViewIfNeeded();
+  await expect(title).toBeInViewport();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await expect(page.locator(".save-status")).toHaveClass(/\bsaved\b/);
 });
 
 async function openProjects(page) {

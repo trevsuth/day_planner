@@ -40,12 +40,15 @@ the graph when recovering browser data.
 Backup and migration
 --------------------
 
-The browser stores the graph in `localStorage` and attachment bytes in
-IndexedDB, scoped to the browser profile and origin. On the old URL, select
+Open **Document** for the import and export actions.
+
+Standalone Graph stores the graph in `localStorage` and attachment bytes in
+IndexedDB, scoped to the browser profile and origin. Hosted Graph at `/graph/`
+saves to Postgres through the shared API. On the old URL, select
 **Export backup** to include the graph and its attachment files. On the new URL,
 select **Import JSON** to replace the open graph with that backup. **Export JSON**
-exports the graph and attachment metadata alone. Graph backups are separate
-from the Planner Postgres backups.
+exports the graph and attachment metadata alone. Hosted Graph and its files
+are included in a full Postgres dump.
 
 Developer shortcuts
 -------------------

@@ -24,7 +24,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run build && npm --prefix ../obsidian-arrow run build:hosted && uv run --project .. uvicorn app_planner.api:app --app-dir .. --host 127.0.0.1 --port 8180",
+    command: "npm run build && npm --prefix ../obsidian-arrow run build:hosted && npm --prefix ../viewer run build && uv run --project .. uvicorn app_planner.api:app --app-dir .. --host 127.0.0.1 --port 8180",
     env: {
       ...process.env,
       DATABASE_URL: databaseUrl,

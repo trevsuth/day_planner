@@ -11,7 +11,7 @@ type StoredDocument = Omit<GraphDocument, "schemaVersion"> & {
   schemaVersion?: number;
 };
 
-type StoredAttachment = {
+export type StoredAttachment = {
   key: string;
   blob: Blob;
   name: string;
@@ -325,6 +325,14 @@ export function loadDocument(repository: StorageRepository = browserStorageRepos
   return repository.loadDocument();
 }
 
+export function hasBrowserDocument(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function saveDocument(
   document: GraphDocument,
   repository: StorageRepository = browserStorageRepository,
@@ -362,7 +370,7 @@ export function exportDocument(document: GraphDocument): string {
   return JSON.stringify({ ...document, schemaVersion: DOCUMENT_SCHEMA_VERSION }, null, 2);
 }
 
-function encodeAttachment(blob: Blob): Promise<string> {
+export function encodeAttachment(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",", 2)[1]);
@@ -371,13 +379,16 @@ function encodeAttachment(blob: Blob): Promise<string> {
   });
 }
 
-export async function exportGraphBackup(document: GraphDocument): Promise<string> {
+export async function exportGraphBackup(
+  document: GraphDocument,
+  loadFile = loadAttachmentFile,
+): Promise<string> {
   const files = new Map<string, string>();
   for (const attachment of document.nodes.flatMap((node) => node.attachments)) {
     const key = attachment.storageKey;
     if (key && files.has(key)) continue;
 
-    const blob = await loadAttachmentFile(attachment);
+    const blob = await loadFile(attachment);
     if (!key || !blob) {
       throw new Error(`The file for “${attachment.name}” is missing from this browser. Use Export JSON to export graph metadata only.`);
     }
@@ -386,10 +397,19 @@ export async function exportGraphBackup(document: GraphDocument): Promise<string
   return JSON.stringify({ format: "graph-wiki-backup-v1", document, files: Object.fromEntries(files) });
 }
 
-export async function importGraphFile(raw: string): Promise<GraphDocument> {
+export async function importGraphFile(
+  raw: string,
+  storeFiles?: (files: StoredAttachment[]) => Promise<void>,
+): Promise<GraphDocument> {
   const value: unknown = JSON.parse(raw);
   if (!isRecord(value) || value.format !== "graph-wiki-backup-v1") {
-    return migrateDocument(value);
+    const document = migrateDocument(value);
+    if (storeFiles) {
+      for (const attachment of document.nodes.flatMap((node) => node.attachments)) {
+        delete attachment.storageKey;
+      }
+    }
+    return document;
   }
 
   const document = migrateDocument(value.document);
@@ -423,7 +443,11 @@ export async function importGraphFile(raw: string): Promise<GraphDocument> {
     attachment.storageKey = stored.key;
   }
 
-  const [first, ...remaining] = restored.values();
+  await (storeFiles ?? storeBrowserFiles)([...restored.values()]);
+  return document;
+}
+
+async function storeBrowserFiles([first, ...remaining]: StoredAttachment[]): Promise<void> {
   if (first) {
     await runAttachmentTransaction("readwrite", (store) => {
       const request = store.add(first);
@@ -431,5 +455,4 @@ export async function importGraphFile(raw: string): Promise<GraphDocument> {
       return request;
     });
   }
-  return document;
 }

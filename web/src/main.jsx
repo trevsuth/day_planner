@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, ClipboardList, FolderKanban, GitBranch, HelpCircle } from "lucide-react";
+import { CalendarDays, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle } from "lucide-react";
 import { ApiReference } from "./api-reference/ApiReference";
 import { PlannerApp } from "./planner/PlannerApp";
 import { ProjectsApp } from "./projects/ProjectsApp";
@@ -10,7 +10,8 @@ import "./styles.css";
 const views = [
   { id: "planner", href: "/", label: "Planner", Icon: CalendarDays },
   { id: "projects", href: "/?view=projects", label: "Projects", Icon: FolderKanban },
-  { id: "graph", href: "/graph/", label: "Graph", Icon: GitBranch },
+  { id: "graph", href: "/graph/", label: "Graph", Icon: GitBranch, separatePage: true },
+  { id: "viewer", href: "/viewer/", label: "Viewer", Icon: FileText, separatePage: true },
   { id: "api", href: "/?view=api", label: "API", Icon: ClipboardList },
 ];
 
@@ -71,7 +72,7 @@ function App() {
             href={view.href}
             aria-current={activeTab === view.id ? "page" : undefined}
             onClick={(event) => {
-              if (view.id === "graph" || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+              if (view.separatePage || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
               event.preventDefault();
               openView(view.id);
             }}

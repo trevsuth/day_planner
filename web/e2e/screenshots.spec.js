@@ -161,3 +161,93 @@ test("capture README screenshots", async ({ page, request }) => {
   await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
   await page.screenshot({ path: path.join(screenshotDirectory, "shortcuts.png"), fullPage: true });
 });
+
+test("capture Graph screenshots", async ({ page }) => {
+  await fs.mkdir(screenshotDirectory, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const timestamp = "2031-02-05T12:00:00Z";
+  const nodes = [
+    { id: "plan", title: "Launch plan", x: 690, y: 435, label: "Operations", fill: "#371542", stroke: "#ff74d4" },
+    { id: "weather", title: "Weather brief", x: 330, y: 240, label: "Forecast", fill: "#0a3043", stroke: "#50dfff" },
+    { id: "telemetry", title: "Telemetry", x: 1040, y: 225, label: "Systems", fill: "#123730", stroke: "#73efba" },
+    { id: "checklist", title: "Pad checklist", x: 320, y: 635, label: "Checklist", fill: "#352714", stroke: "#fbd274" },
+    { id: "handoff", title: "Crew handoff", x: 1050, y: 650, label: "People", fill: "#24264a", stroke: "#9aa7ff" },
+  ].map(({ id, title, x, y, label, fill, stroke }) => ({
+    id, title, x, y,
+    labels: [label],
+    tags: ["launch"],
+    attachments: [],
+    content: {
+      type: "article",
+      markdown: id === "plan"
+        ? "## Readiness review\nConfirm the launch window with the [[Weather brief]].\n\n- Verify the [[Pad checklist]].\n- Review [[Telemetry]] before the [[Crew handoff]]."
+        : `Notes for ${title.toLowerCase()}. See the [[Launch plan]].`,
+      updatedAt: timestamp,
+    },
+    style: { radius: id === "plan" ? 72 : 62, fill, stroke, textColor: "#e5fbff" },
+  }));
+  const relationships = [
+    ["plan", "weather", "depends on"],
+    ["plan", "telemetry", "monitors"],
+    ["plan", "checklist", "requires"],
+    ["plan", "handoff", "coordinates"],
+    ["telemetry", "handoff", "informs"],
+  ].map(([fromNodeId, toNodeId, type]) => ({
+    id: `${fromNodeId}-${toNodeId}`,
+    fromNodeId, toNodeId, type,
+    properties: {},
+    style: { stroke: "#4acae0", width: 2 },
+  }));
+  const document = {
+    schemaVersion: 1,
+    id: "launch-knowledge-map",
+    title: "Launch knowledge map",
+    nodes,
+    relationships,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  await page.goto("/graph/");
+  await page.locator(".document-actions summary").click();
+  await page.getByLabel("Import JSON").setInputFiles({
+    name: "launch-knowledge-map.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(document)),
+  });
+  const graphNodes = page.locator(".graph-node");
+  await expect(graphNodes).toHaveCount(nodes.length);
+  await expect(page.locator(".save-status")).toHaveClass(/\bsaved\b/);
+  await page.getByRole("button", { name: "Fit", exact: true }).click();
+  await page.screenshot({ path: path.join(screenshotDirectory, "graph-canvas.png"), fullPage: true });
+
+  await graphNodes.filter({ hasText: "Launch plan" }).locator("circle").first().click();
+  await expect(page.getByRole("heading", { name: "Readiness review" })).toBeVisible();
+  await page.locator(".markdown-preview").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(screenshotDirectory, "graph-wiki.png"), fullPage: true });
+});
+
+test("capture Viewer screenshot", async ({ page }) => {
+  await fs.mkdir(screenshotDirectory, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/viewer/");
+  await page.getByLabel("Source", { exact: true }).fill([
+    "# Release workflow",
+    "",
+    "Review the release notes before deploying to the home lab.",
+    "",
+    "```mermaid",
+    "flowchart LR",
+    "  Draft --> Review{Approved?}",
+    "  Review -->|Yes| Deploy",
+    "  Review -->|Revise| Draft",
+    "  Deploy --> Verify",
+    "```",
+    "",
+    "- Check the health endpoint.",
+    "- Record the deployed image tag.",
+  ].join("\n"));
+  await expect(page.getByRole("heading", { name: "Release workflow" })).toBeVisible();
+  await page.waitForFunction(() => document.querySelector(".diagram img")?.naturalWidth > 0);
+  await page.screenshot({ path: path.join(screenshotDirectory, "viewer.png"), fullPage: true });
+});

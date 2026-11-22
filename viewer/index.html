@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; object-src 'none'; base-uri 'none'">
+    <title>Markdown &amp; Mermaid Viewer</title>
+  </head>
+  <body>
+    <header class="masthead">
+      <nav aria-label="Application views">
+        <a href="/">Planner</a><a href="/?view=projects">Projects</a><a href="/graph/">Graph</a><a href="/viewer/" aria-current="page">Viewer</a><a href="/?view=api">API</a>
+      </nav>
+    </header>
+    <main>
+      <div class="heading">
+        <h1>Markdown &amp; Mermaid Viewer</h1>
+        <label class="file-control">Open file <input id="file" type="file" accept=".md,.markdown,.mmd,.mermaid,.txt,text/plain"></label>
+      </div>
+      <p id="file-error" role="alert" hidden></p>
+      <div class="workspace">
+        <section class="pane editor" aria-label="Editor">
+          <div class="pane-header">
+            <label for="source">Source</label>
+            <label for="mode" class="mode-label">Format
+              <select id="mode">
+                <option value="markdown">Markdown</option>
+                <option value="mermaid">Mermaid</option>
+              </select>
+            </label>
+          </div>
+          <textarea id="source" maxlength="100000" spellcheck="false" placeholder="Paste Markdown or Mermaid source"></textarea>
+        </section>
+        <section class="pane" aria-labelledby="preview-heading">
+          <div class="pane-header"><h2 id="preview-heading">Preview</h2></div>
+          <div id="preview" class="preview"></div>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
