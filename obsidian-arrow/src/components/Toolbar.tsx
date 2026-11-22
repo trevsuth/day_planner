@@ -13,6 +13,7 @@ type ToolbarProps = {
   onUndo: () => void;
   onRedo: () => void;
   onExport: () => void;
+  onBackup: () => void;
   onImport: (file: File) => void;
   onReset: () => void;
 };
@@ -32,6 +33,7 @@ export default function Toolbar({
   onUndo,
   onRedo,
   onExport,
+  onBackup,
   onImport,
   onReset,
 }: ToolbarProps) {
@@ -71,6 +73,9 @@ export default function Toolbar({
       </button>
       <button type="button" onClick={onExport}>
         Export JSON
+      </button>
+      <button type="button" onClick={onBackup}>
+        Export backup
       </button>
       <label className="file-button">
         Import JSON

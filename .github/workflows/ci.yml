@@ -42,10 +42,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            obsidian-arrow/package-lock.json
 
       - name: Install web dependencies
         run: npm --prefix web ci
+
+      - name: Build hosted Graph frontend
+        run: |
+          npm --prefix obsidian-arrow ci
+          npm --prefix obsidian-arrow run build:hosted
 
       - name: Install Playwright browser
         run: npm --prefix web exec playwright install --with-deps chromium

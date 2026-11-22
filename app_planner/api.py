@@ -23,6 +23,7 @@ from app_planner.services import (
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 WEB_DIST_DIR = BASE_DIR / "web" / "dist"
+GRAPH_DIST_DIR = BASE_DIR / "obsidian-arrow" / "dist-hosted"
 
 
 @asynccontextmanager
@@ -105,6 +106,9 @@ def put_legacy_entry(entry_date: date, entry: PlannerEntry) -> PlannerEntry:
 
 if WEB_DIST_DIR.exists():
     app.mount("/assets", StaticFiles(directory=WEB_DIST_DIR / "assets"), name="assets")
+
+if GRAPH_DIST_DIR.exists():
+    app.mount("/graph", StaticFiles(directory=GRAPH_DIST_DIR, html=True), name="graph")
 
 
 @app.get("/")

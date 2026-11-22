@@ -31,7 +31,8 @@ import {
 import {
   deleteAttachmentFile,
   exportDocument,
-  importDocument,
+  exportGraphBackup,
+  importGraphFile,
   loadAttachmentFile,
   loadDocument,
   saveAttachmentFile,
@@ -349,20 +350,28 @@ export default function App() {
     commitDocument((current) => updateNodesStyle(current, selectedNodeIds, patch));
   }
 
-  function handleExport() {
-    const blob = new Blob([exportDocument(document)], { type: "application/json" });
+  function downloadGraph(raw: string, suffix: string) {
+    const blob = new Blob([raw], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement("a");
     anchor.href = url;
-    anchor.download = `${document.title.replace(/\W+/g, "-").toLowerCase() || "graph-wiki"}.json`;
+    anchor.download = `${document.title.replace(/\W+/g, "-").toLowerCase() || "graph-wiki"}${suffix}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleBackup() {
+    try {
+      downloadGraph(await exportGraphBackup(document), "-backup");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not back up the graph.");
+    }
   }
 
   async function handleImport(file: File) {
     try {
       const raw = await file.text();
-      const imported = importDocument(raw);
+      const imported = await importGraphFile(raw);
       commitDocument(() => touchDocument(imported));
       setSelection(null);
       setPendingRelationshipFromId(null);
@@ -446,7 +455,8 @@ export default function App() {
         onDeleteSelected={handleDeleteSelected}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        onExport={handleExport}
+        onExport={() => downloadGraph(exportDocument(document), "")}
+        onBackup={handleBackup}
         onImport={handleImport}
         onReset={() => {
           commitDocument(() => createEmptyDocument());

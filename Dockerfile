@@ -1,10 +1,18 @@
-FROM node:20-alpine AS web-build
+FROM node:22-alpine AS web-build
 
 WORKDIR /build/web
 COPY web/package*.json ./
 RUN npm ci
 COPY web/ ./
 RUN npm run build
+
+FROM node:22-alpine AS graph-build
+
+WORKDIR /build/graph
+COPY obsidian-arrow/package*.json ./
+RUN npm ci
+COPY obsidian-arrow/ ./
+RUN npm run build:hosted
 
 FROM python:3.13-slim
 
@@ -18,6 +26,7 @@ COPY pyproject.toml README.md ./
 COPY app_planner ./app_planner
 COPY app_projmgmt ./app_projmgmt
 COPY --from=web-build /build/web/dist ./web/dist
+COPY --from=graph-build /build/graph/dist-hosted ./obsidian-arrow/dist-hosted
 
 RUN pip install --no-cache-dir \
   "fastapi>=0.111.0" \

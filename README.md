@@ -46,10 +46,11 @@ just host-up
 ```
 
 Open Daily Planner at `http://localhost:8080` and Obsidian Arrow at
-`http://localhost:8081`. Set `ARROWSAPP_PORT` in `.env` to change Obsidian
-Arrow's host port. Obsidian Arrow stores graph data and attachments in each
-browser profile. JSON export and import move graph data and attachment metadata
-between devices. Attachment files stay in the browser where they were added.
+`http://localhost:8080/graph/`. The standalone Graph service is also available
+at `http://localhost:8081` for existing browser data and standalone use. Set
+`ARROWSAPP_PORT` in `.env` to change its port. Graph data is specific to each
+browser origin. Use **Export backup** at the old origin and **Import JSON** at
+the new one to move the graph and its attachment files.
 See the [Obsidian Arrow README](obsidian-arrow/README.md) for standalone setup
 and development commands.
 
@@ -140,7 +141,10 @@ just
 
 ### k3s Deployment
 
-Kubernetes manifests for k3s live in `deploy/k3s`. They include the app deployment, Postgres StatefulSet, persisted storage, Traefik-compatible ingress, and a nightly `pg_dump` backup CronJob.
+The k3s deployment serves Daily Planner at `/` and Obsidian Arrow at `/graph/`
+from the same image and ingress. The manifests include a Postgres StatefulSet,
+persisted storage, and a nightly `pg_dump` backup CronJob. See the
+[k3s deployment guide](deploy/k3s/README.md) for image rollout and graph migration.
 
 Before deploying, set the real image, hostname, and database secret values in `deploy/k3s`, then apply the kustomize base:
 
@@ -222,6 +226,7 @@ just test-postgres
 Run the focused browser smoke tests. Install Playwright's Chromium runtime once on each development machine:
 
 ```bash
+npm --prefix obsidian-arrow ci
 npx --prefix web playwright install chromium
 just web-typecheck
 just web-unit

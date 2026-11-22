@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:hosted": "tsc -b && vite build --base=/graph/ --outDir dist-hosted",
     "preview": "vite preview"
   },
   "dependencies": {

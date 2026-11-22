@@ -237,10 +237,11 @@ function runAttachmentTransaction<T>(
         const store = transaction.objectStore(ATTACHMENT_STORE_NAME);
         const request = action(store);
 
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error ?? new Error("Attachment storage request failed."));
-        transaction.oncomplete = () => database.close();
-        transaction.onerror = () => {
+        transaction.oncomplete = () => {
+          database.close();
+          resolve(request.result);
+        };
+        transaction.onabort = () => {
           database.close();
           reject(transaction.error ?? new Error("Attachment storage transaction failed."));
         };
@@ -361,6 +362,74 @@ export function exportDocument(document: GraphDocument): string {
   return JSON.stringify({ ...document, schemaVersion: DOCUMENT_SCHEMA_VERSION }, null, 2);
 }
 
-export function importDocument(raw: string): GraphDocument {
-  return migrateDocument(JSON.parse(raw));
+function encodeAttachment(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1]);
+    reader.onerror = () => reject(reader.error ?? new Error("Could not read attachment."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function exportGraphBackup(document: GraphDocument): Promise<string> {
+  const files = new Map<string, string>();
+  for (const attachment of document.nodes.flatMap((node) => node.attachments)) {
+    const key = attachment.storageKey;
+    if (key && files.has(key)) continue;
+
+    const blob = await loadAttachmentFile(attachment);
+    if (!key || !blob) {
+      throw new Error(`The file for “${attachment.name}” is missing from this browser. Use Export JSON to export graph metadata only.`);
+    }
+    files.set(key, await encodeAttachment(blob));
+  }
+  return JSON.stringify({ format: "graph-wiki-backup-v1", document, files: Object.fromEntries(files) });
+}
+
+export async function importGraphFile(raw: string): Promise<GraphDocument> {
+  const value: unknown = JSON.parse(raw);
+  if (!isRecord(value) || value.format !== "graph-wiki-backup-v1") {
+    return migrateDocument(value);
+  }
+
+  const document = migrateDocument(value.document);
+  const files = value.files;
+  if (!isRecord(files)) throw new Error("Invalid graph backup attachment data.");
+
+  const restored = new Map<string, StoredAttachment>();
+  for (const attachment of document.nodes.flatMap((node) => node.attachments)) {
+    const oldKey = attachment.storageKey;
+    const encoded = oldKey && Object.prototype.hasOwnProperty.call(files, oldKey) ? files[oldKey] : undefined;
+    if (!oldKey || typeof encoded !== "string") {
+      throw new Error(`The backup is missing “${attachment.name}”.`);
+    }
+
+    let stored = restored.get(oldKey);
+    if (!stored) {
+      const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+      stored = {
+        key: `import-${globalThis.crypto.getRandomValues(new Uint32Array(4)).join("-")}`,
+        blob: new Blob([bytes], { type: attachment.mimeType }),
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        sizeBytes: bytes.length,
+        updatedAt: new Date().toISOString(),
+      };
+      restored.set(oldKey, stored);
+    }
+    if (stored.sizeBytes !== attachment.sizeBytes) {
+      throw new Error(`The backup contains an invalid file size for “${attachment.name}”.`);
+    }
+    attachment.storageKey = stored.key;
+  }
+
+  const [first, ...remaining] = restored.values();
+  if (first) {
+    await runAttachmentTransaction("readwrite", (store) => {
+      const request = store.add(first);
+      for (const file of remaining) store.add(file);
+      return request;
+    });
+  }
+  return document;
 }

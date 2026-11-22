@@ -1,4 +1,45 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+
+test("restores a hosted Graph backup with attachment bytes in a fresh browser profile", async ({ page, browser }) => {
+  await page.goto("/graph/");
+  await page.getByRole("button", { name: "Add node" }).click();
+  await page.getByText("Attached files", { exact: true }).click();
+  const contents = Buffer.from([0, 17, 128, 255]);
+  await page.getByLabel("Add metadata").setInputFiles({
+    name: "sample.bin",
+    mimeType: "application/octet-stream",
+    buffer: contents,
+  });
+  await expect(page.getByText("sample.bin", { exact: true })).toBeVisible();
+
+  const backupEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export backup" }).click();
+  const backup = await backupEvent;
+
+  const freshPage = await browser.newPage();
+  try {
+    await freshPage.goto(page.url());
+    await expect(freshPage.getByRole("button", { name: "Add node" })).toBeVisible();
+    await expect(freshPage.locator(".graph-node")).toHaveCount(0);
+    await freshPage.getByLabel("Import JSON").setInputFiles({
+      name: backup.suggestedFilename(),
+      mimeType: "application/json",
+      buffer: await readFile(await backup.path()),
+    });
+    const node = freshPage.locator(".graph-node").first();
+    await expect(node).toBeVisible();
+    await freshPage.reload();
+    await node.click();
+    await freshPage.getByText("Attached files", { exact: true }).click();
+
+    const attachmentEvent = freshPage.waitForEvent("download");
+    await freshPage.getByRole("button", { name: "Download", exact: true }).click();
+    expect(await readFile(await (await attachmentEvent).path())).toEqual(contents);
+  } finally {
+    await freshPage.context().close();
+  }
+});
 
 async function openProjects(page) {
   await page
