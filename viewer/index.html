@@ -23,9 +23,13 @@
         <div class="toolbar-group" role="group" aria-label="Document controls">
           <label class="mode-label" for="mode">Format</label>
           <select id="mode">
+            <option value="mermaid" selected>Mermaid</option>
             <option value="markdown">Markdown</option>
-            <option value="mermaid">Mermaid</option>
           </select>
+          <div class="diagram-controls" id="diagram-controls">
+            <label class="mode-label" for="diagram-type">Diagram type</label>
+            <select id="diagram-type"></select>
+          </div>
           <label class="file-control">
             <span data-icon="file" aria-hidden="true"></span>Open file
             <input id="file" type="file" accept=".md,.markdown,.mmd,.mermaid,.txt,text/plain">
@@ -33,8 +37,8 @@
         </div>
       </header>
       <p id="file-error" role="alert" hidden></p>
-      <div class="workspace">
-        <section class="pane editor" aria-label="Editor">
+      <div class="workspace" id="viewer-workspace">
+        <section class="pane editor" id="source-pane" aria-label="Editor">
           <div class="pane-header">
             <span data-icon="source" aria-hidden="true"></span><label for="source">Source</label>
           </div>
@@ -43,8 +47,26 @@
         <section class="pane" aria-labelledby="preview-heading">
           <div class="pane-header">
             <span data-icon="preview" aria-hidden="true"></span><h2 id="preview-heading">Preview</h2>
+            <div class="preview-tools" role="group" aria-label="Preview navigation">
+              <button class="preview-size" type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out">
+                <span data-icon="zoomOut" aria-hidden="true"></span>
+              </button>
+              <output id="preview-zoom" aria-label="Preview zoom">100%</output>
+              <button class="preview-size" type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in">
+                <span data-icon="zoomIn" aria-hidden="true"></span>
+              </button>
+              <button class="preview-size preview-fit" type="button" id="preview-fit" title="Fit preview">Fit</button>
+              <button class="preview-size" type="button" id="preview-pan" aria-label="Pan preview" title="Pan preview" aria-pressed="false">
+                <span data-icon="hand" aria-hidden="true"></span>
+              </button>
+            </div>
+            <button id="preview-size" class="preview-size" type="button" aria-label="Expand preview" title="Expand preview" aria-controls="viewer-workspace">
+              <span data-icon="expand" aria-hidden="true"></span>
+            </button>
           </div>
-          <div id="preview" class="preview"></div>
+          <div id="preview-viewport" class="preview-viewport" tabindex="0" role="region" aria-label="Preview canvas">
+            <div id="preview" class="preview"></div>
+          </div>
         </section>
       </div>
     </main>

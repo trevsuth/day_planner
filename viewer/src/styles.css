@@ -112,7 +112,7 @@ body::before {
   height: 18px;
 }
 
-:where(a, input, select, textarea):focus-visible,
+:where(a, button, input, select, textarea):focus-visible,
 .file-control:focus-within {
   outline: 2px solid var(--line-strong);
   outline-offset: 2px;
@@ -154,6 +154,13 @@ body::before {
   padding: 5px;
   border: 1px solid rgb(91 210 234 / 0.24);
   background: rgb(3 10 14 / 0.38);
+}
+
+.diagram-controls:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
 }
 
 .mode-label {
@@ -202,6 +209,9 @@ select,
   gap: 14px;
 }
 
+.workspace.preview-expanded { grid-template-columns: minmax(0, 1fr); }
+.workspace .pane[hidden] { display: none; }
+
 .pane {
   display: flex;
   min-width: 0;
@@ -217,7 +227,9 @@ select,
 .pane-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
+  min-height: 41px;
   padding-bottom: 8px;
   border-bottom: 1px solid rgb(91 210 234 / 0.22);
   color: var(--line-strong);
@@ -232,10 +244,52 @@ select,
   text-transform: uppercase;
 }
 
+.preview-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.preview-tools output {
+  min-width: 4ch;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.preview-size {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  background: rgb(10 25 33 / 0.92);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.preview-fit {
+  width: auto;
+  padding-inline: 8px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.preview-size:hover:not(:disabled),
+.preview-size[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  background: var(--panel-strong);
+}
+
+.preview-size:disabled { cursor: default; opacity: 0.52; }
+
 textarea,
-.preview {
+.preview-viewport {
   min-height: 60vh;
-  padding: 12px;
   border: 1px solid var(--line);
   background: rgb(6 14 20 / 0.76);
   color: var(--text);
@@ -247,11 +301,21 @@ textarea {
   display: block;
   width: 100%;
   flex: 1;
+  padding: 12px;
   resize: vertical;
 }
 
 textarea::placeholder { color: var(--muted); }
-.preview { flex: 1; overflow-wrap: anywhere; }
+.preview-viewport {
+  height: 60vh;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.preview-viewport:focus-visible { outline: 2px solid var(--line-strong); }
+.preview-viewport.pan-enabled { cursor: grab; touch-action: none; user-select: none; }
+.preview-viewport.pan-enabled a { cursor: inherit; }
+.preview-viewport.panning, .preview-viewport.panning a { cursor: grabbing; }
+.preview { padding: 12px; overflow-wrap: anywhere; }
 .preview > :first-child { margin-top: 0; }
 .preview a { color: var(--line-strong); }
 .preview img { max-width: 100%; }
@@ -271,7 +335,8 @@ textarea::placeholder { color: var(--muted); }
 
 @media (max-width: 760px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
-  textarea, .preview { min-height: 42vh; }
+  textarea, .preview-viewport { min-height: 42vh; }
+  .preview-viewport { height: 52vh; }
 }
 
 @media (max-width: 520px) {

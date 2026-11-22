@@ -48,10 +48,19 @@ single save or import request can be up to 24 MiB. See the
 
 ## Markdown and Mermaid Viewer
 
-Open **Viewer** from the web navigation or go to `/viewer/`. Paste Markdown
-or open a local `.md` file to see a live preview. Use a `mermaid` or `mmd`
-fenced code block to embed a diagram in Markdown. To preview a diagram on its
-own, select **Mermaid** or open an `.mmd` or `.mermaid` file.
+Open **Viewer** from the web navigation or go to `/viewer/`. It starts in
+**Mermaid** with a rendered flowchart. Use **Diagram type** to load an editable
+example, such as a sequence diagram, Gantt chart, or mind map. Edits stay in
+their own draft while you switch diagram types or formats in the open tab.
+Use **Expand preview** in the Preview header to span both panes. Select
+**Restore split view** or press `Esc` to bring the editor back.
+Use the zoom buttons or `Ctrl`/`Cmd` + scroll to zoom the preview. Turn on
+**Pan preview** and drag to scan around it. **Fit** resets the view and shrinks
+a tall standalone diagram to fit the pane.
+
+Select **Markdown** or open a local `.md` file for a live Markdown preview.
+Use a `mermaid` or `mmd` fenced code block to embed a diagram. Open an `.mmd`
+or `.mermaid` file to preview its source as a standalone diagram.
 
 The viewer renders in the browser and does not upload or save your source.
 Raw HTML and external images are disabled in the preview. Keep your source in
@@ -73,7 +82,7 @@ a local file if you want to use it again.
 
 ![Graph wiki showing the selected launch plan with a Markdown preview](docs/screenshots/graph-wiki.png)
 
-![Viewer showing Markdown source alongside its rendered text and Mermaid workflow](docs/screenshots/viewer.png)
+![Viewer opening in Mermaid mode with an editable example and a rendered flowchart](docs/screenshots/viewer.png)
 
 ## Quickstart
 
