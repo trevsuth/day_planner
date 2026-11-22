@@ -187,14 +187,11 @@ The manifests include a Postgres StatefulSet, persisted storage, and a nightly
 `pg_dump` backup CronJob. See the
 [k3s deployment guide](deploy/k3s/README.md) for image rollout and graph migration.
 
-Before deploying, set the real image, hostname, and database secret values in `deploy/k3s`, then apply the kustomize base:
+The guide walks through installing from a digest-pinned release, setting up HTTPS,
+initializing the database, and checking the rollout. It also covers off-node backups. Run `just k3s-render` to preview the
+example without connecting to a cluster.
 
-```bash
-just k3s-render
-just k3s-apply
-```
-
-Cluster-wide monitoring should be managed outside this repo. The app exposes `/api/health` as a DB-backed readiness/liveness endpoint for k3s probes and external blackbox checks.
+Cluster-wide monitoring should be managed outside this repo. The API exposes `/api/health` for database readiness and `/api/livez` for process liveness.
 
 ## Requirements
 
@@ -473,11 +470,15 @@ Available `just` recipes:
 | `just host-logs [services…]` | Follow Compose logs |
 | `just host-ps` | Show running and stopped Compose containers |
 | `just k3s-publish IMAGE PLATFORM [target]` | Build and push the `web`, `api`, or `viewer` target. Defaults to `web` |
-| `just k3s-rollout` | Wait for Postgres, API, web, and Viewer |
-| `just k3s-logs [deployment]` | Follow deployment logs. Defaults to the API |
-| `just k3s-render` | Render the k3s manifests with kustomize |
-| `just k3s-apply` | Apply the k3s manifests |
-| `just k3s-status` | Show k3s deployment status |
+| `just k3s-rollout CONTEXT` | Wait for Postgres, API, web, and Viewer |
+| `just k3s-logs CONTEXT [deployment]` | Follow deployment logs. Defaults to the API |
+| `just k3s-render [overlay]` | Preview the example or a configured k3s overlay |
+| `just k3s-init-db CONTEXT` | Initialize or reuse the database secret |
+| `just k3s-preflight CONTEXT [overlay]` | Validate the configured overlay against the target cluster |
+| `just k3s-apply CONTEXT [overlay]` | Validate and apply the configured overlay |
+| `just k3s-smoke URL` | Verify the web and API routes through ingress |
+| `just k3s-backup CONTEXT FILE` | Stream a full Postgres archive to a new local file |
+| `just k3s-status CONTEXT` | Show k3s deployment status |
 | `just host-backup [file]` | Export hosted Planner and Projects data to JSON |
 | `just host-restore [file]` | Replace hosted Planner and Projects data from JSON |
 | `just docker-up` | Build and run the Docker Compose hosted app |

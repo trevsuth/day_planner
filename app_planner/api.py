@@ -45,6 +45,11 @@ app.include_router(project_router)
 app.include_router(graph_router)
 
 
+@app.get("/api/livez")
+def live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     try:

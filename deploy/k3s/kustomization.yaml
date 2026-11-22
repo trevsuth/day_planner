@@ -5,21 +5,9 @@ namespace: daily-planner
 
 resources:
   - namespace.yaml
-  - secret.yaml
   - postgres.yaml
   - app.yaml
   - api.yaml
   - viewer.yaml
   - ingress.yaml
   - backup-cronjob.yaml
-
-images:
-  - name: daily-planner-web
-    newName: registry.example.com/daily-planner-web
-    newTag: latest
-  - name: daily-planner-api
-    newName: registry.example.com/daily-planner-api
-    newTag: latest
-  - name: markdown-viewer
-    newName: registry.example.com/markdown-viewer
-    newTag: latest
