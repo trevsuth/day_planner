@@ -39,6 +39,7 @@ RUN --mount=type=bind,from=uv,source=/uv,target=/bin/uv \
 COPY app_planner ./app_planner
 COPY app_projmgmt ./app_projmgmt
 COPY app_graph ./app_graph
+COPY app_viewer ./app_viewer
 
 RUN useradd --create-home --shell /usr/sbin/nologin appuser
 USER appuser

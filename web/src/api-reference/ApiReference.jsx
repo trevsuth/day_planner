@@ -96,6 +96,16 @@ const projectEndpoints = [
   },
 ];
 
+const graphEndpoints = [
+  { method: "GET", path: "/api/graphs/workspace", purpose: "Read the shared graph and its current revision." },
+  { method: "PUT", path: "/api/graphs/workspace", purpose: "Save a graph against its current revision. A stale revision returns 409." },
+  { method: "GET", path: "/api/graphs/workspace/attachments/{key}", purpose: "Download a stored attachment by its storage key." },
+];
+
+const viewerEndpoints = [
+  { method: "POST", path: "/api/viewer/preview", purpose: "Convert Markdown to HTML and extract Mermaid source. The browser can render the returned diagrams." },
+];
+
 export function ApiReference() {
   return (
     <>
@@ -105,20 +115,20 @@ export function ApiReference() {
             <ClipboardList size={16} />
             <span>API Reference</span>
           </div>
-          <h1>Local API</h1>
+          <h1>Day Planner API</h1>
         </div>
-        <a className="secondary-button api-doc-link" href="http://127.0.0.1:8000/docs" target="_blank" rel="noreferrer">
+        <a className="secondary-button api-doc-link" href="/docs" target="_blank" rel="noreferrer">
           Open Docs
         </a>
       </header>
 
       <div className="api-reference-grid">
         <section className="api-panel api-overview">
-          <h2>Development URLs</h2>
+          <h2>API URLs</h2>
           <dl>
             <div>
               <dt>API server</dt>
-              <dd>http://127.0.0.1:8000</dd>
+              <dd>/api</dd>
             </div>
             <div>
               <dt>OpenAPI JSON</dt>
@@ -133,6 +143,8 @@ export function ApiReference() {
 
         <ApiEndpointSection title="Planner" endpoints={plannerEndpoints} />
         <ApiEndpointSection title="Project Manager" endpoints={projectEndpoints} />
+        <ApiEndpointSection title="Graph" endpoints={graphEndpoints} />
+        <ApiEndpointSection title="Viewer" endpoints={viewerEndpoints} />
 
         <section className="api-panel">
           <h2>Planner Entry</h2>

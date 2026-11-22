@@ -264,6 +264,12 @@ Screenshots are written to `docs/screenshots/`.
 
 Continuous integration runs the same core checks on pushes to `main` and pull requests: Ruff, Python tests, frontend build, frontend typecheck, frontend unit tests, and focused Playwright smoke tests with isolated PostgreSQL schemas, and strict validation of the HTTP and TLS Kubernetes manifests.
 
+## APIs and MCP
+
+Open the suite's API Reference for Planner, Projects, Graph, and Viewer
+endpoints. See the [MCP guide](docs/mcp.md) for local clients and ChatGPT
+connection options.
+
 ## Backup And Restore
 
 Export all planner entries, linked priority assignments, projects, cards, and card activity to a portable JSON file:

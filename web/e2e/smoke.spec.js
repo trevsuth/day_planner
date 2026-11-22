@@ -208,7 +208,10 @@ test("loads the planner, project manager, and API reference", async ({ page }) =
     .getByRole("navigation", { name: "Application views" })
     .getByRole("link", { name: "API" })
     .click();
-  await expect(page.getByRole("heading", { name: "Local API" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Day Planner API" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Graph", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Viewer", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Docs" })).toHaveAttribute("href", "/docs");
 
   await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
   await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
