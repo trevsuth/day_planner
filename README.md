@@ -42,28 +42,26 @@ On another computer with Docker or Podman installed:
 
 ```bash
 cp .env.example .env
-just host-up
+just host-start daily-planner
 ```
 
 Open Daily Planner at `http://localhost:8080` and Obsidian Arrow at
-`http://localhost:8080/graph/`. The standalone Graph service is also available
-at `http://localhost:8081` for existing browser data and standalone use. Set
-`ARROWSAPP_PORT` in `.env` to change its port. Graph data is specific to each
+`http://localhost:8080/graph/`. For standalone Graph or to recover existing
+browser data, run `just host-start obsidian-arrow` and open
+`http://localhost:8081`. Set `ARROWSAPP_PORT` in `.env` to change its port.
+Graph data is specific to each
 browser origin. Use **Export backup** at the old origin and **Import JSON** at
 the new one to move the graph and its attachment files.
 See the [Obsidian Arrow README](obsidian-arrow/README.md) for standalone setup
 and development commands.
 
-`just host-up` uses Docker Compose by default. To use Podman Compose instead:
+`just host-start` starts services in the background. With no service arguments
+it starts all three services. Use `just host-up` for a foreground run,
+`just host-ps` for status, and `just host-logs daily-planner` to follow app logs.
+Docker Compose is the default. To start the combined app with Podman Compose:
 
 ```bash
-just podman-up
-```
-
-Or set the compose command explicitly:
-
-```bash
-CONTAINER_COMPOSE='podman compose' just host-up
+CONTAINER_COMPOSE='podman compose' just host-start daily-planner
 ```
 
 Docker-specific shortcuts are also available:
@@ -100,13 +98,13 @@ DAILY_PLANNER_PORT=8082
 Without `just`, run the compose tool directly:
 
 ```bash
-docker compose up --build
+docker compose up --build -d daily-planner
 ```
 
 or:
 
 ```bash
-podman compose up --build
+podman compose up --build -d daily-planner
 ```
 
 ### Local Development
@@ -114,8 +112,7 @@ podman compose up --build
 From the repository root:
 
 ```bash
-uv sync
-npm --prefix web install
+just setup
 just db-up
 ```
 
@@ -125,7 +122,11 @@ Run the web app:
 just dev
 ```
 
-Open `http://127.0.0.1:5173/` in your browser. Use the top tabs to switch between the daily planner and project management views. Press `Ctrl+C` in the terminal running `just dev` to stop both servers.
+Open `http://127.0.0.1:5173/` and use the top navigation to switch between
+Planner, Projects, and Graph. `just dev` builds the hosted Graph bundle before
+starting FastAPI and Vite. After editing Graph code, run `just graph-build`
+to refresh the bundle, or use `just graph-dev` for standalone hot reload.
+Press `Ctrl+C` to stop both development servers.
 
 To run the terminal planner instead:
 
@@ -160,44 +161,12 @@ Cluster-wide monitoring should be managed outside this repo. The app exposes `/a
 - Python 3.13 or newer
 - Postgres 17 or newer, or Docker/Podman Compose for the included Postgres service
 - [uv](https://docs.astral.sh/uv/) for dependency management
-- Node.js and npm for the React frontend
+- Node.js 22 and npm for both frontends
 - Optional: [just](https://github.com/casey/just) for the included task shortcuts
 
-## Getting Started
+## Local Data
 
-Install Python dependencies:
-
-```bash
-uv sync
-```
-
-Install web dependencies:
-
-```bash
-npm --prefix web install
-```
-
-Start a local Postgres database:
-
-```bash
-just db-up
-```
-
-Run the TUI planner:
-
-```bash
-just tui
-```
-
-Run the web app during development:
-
-```bash
-just dev
-```
-
-Then open the Vite URL shown in the terminal, usually `http://127.0.0.1:5173`.
-
-The TUI and web app both connect to Postgres through `DATABASE_URL`. Set `DATABASE_SCHEMA` to isolate tables into a named Postgres schema, which is useful for tests or multiple local environments. For local container hosting, Docker Compose starts Postgres and persists it in the local named volume `daily_planner_postgres_data`. Docker and Podman keep their own local volume stores, so each computer and container engine has separate data by default.
+The TUI and web app connect to Postgres through `DATABASE_URL`. Root `just` recipes load `.env` when present. If you change `POSTGRES_PORT`, update `DATABASE_URL` and `TEST_DATABASE_URL` for host-side commands. Set `DATABASE_SCHEMA` to isolate tables into a named Postgres schema, which is useful for tests or multiple local environments. For local container hosting, Docker Compose starts Postgres and persists it in the local named volume `daily_planner_postgres_data`. Docker and Podman keep their own local volume stores, so each computer and container engine has separate data by default.
 
 To import existing SQLite data after starting Postgres:
 
@@ -226,14 +195,13 @@ just test-postgres
 Run the focused browser smoke tests. Install Playwright's Chromium runtime once on each development machine:
 
 ```bash
-npm --prefix obsidian-arrow ci
-npx --prefix web playwright install chromium
+just browser-install
 just web-typecheck
 just web-unit
 just web-test
 ```
 
-The frontend typecheck currently covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build the frontend, start an isolated local API server, and set `DATABASE_SCHEMA` so test tables stay separate from local application data.
+The frontend typecheck currently covers the typed API client and shared frontend contracts. The frontend unit tests cover extracted scheduling and hierarchy logic. The browser tests build both frontends, start an isolated local API server, and set `DATABASE_SCHEMA` so test tables stay separate from local application data.
 
 Capture README screenshots from isolated demo data:
 
@@ -314,7 +282,9 @@ Project hierarchy, dependency, and schedule-warning rules are implemented server
 
 ## Platform Notes
 
-The current platform is Python, FastAPI, Postgres, React, and Textual. Postgres is used as the source-of-truth database so the hosted app can run cleanly on container platforms and keep room for multi-user or multi-device workflows later.
+FastAPI and Textual use Postgres as the source of truth for Planner and
+Projects. The hosted app serves both React frontends. Graph uses browser-local
+storage, so Graph backups are managed separately from Postgres backups.
 
 ## Controls
 
@@ -418,9 +388,11 @@ Available `just` recipes:
 | Recipe | Description |
 | --- | --- |
 | `just` | List all available recipes |
+| `just setup` | Install locked Python and frontend dependencies |
+| `just browser-install` | Install Chromium for smoke tests and screenshots |
 | `just test` | Run the Python test suite |
 | `just test-postgres` | Run the full Postgres-backed Python test suite |
-| `just db-up` | Start only the local Postgres database for development |
+| `just db-up` | Start local Postgres and wait for connections |
 | `just db-down` | Stop the local Postgres database |
 | `just web-typecheck` | Typecheck the TypeScript frontend foundation |
 | `just web-unit` | Run frontend domain unit tests |
@@ -429,13 +401,20 @@ Available `just` recipes:
 | `just backup [file]` | Export local planner and project data to portable JSON |
 | `just restore [file]` | Replace local data from a portable JSON backup |
 | `just migrate-sqlite [planner_db] [project_db]` | Import existing SQLite databases into Postgres |
-| `just dev` | Run the API and React development servers together |
-| `just host-up` | Build and run the hosted container app using `CONTAINER_COMPOSE`, defaulting to Docker Compose |
+| `just dev` | Build hosted Graph and run FastAPI and Planner Vite |
+| `just graph-dev` | Run Graph by itself with hot reload |
+| `just graph-build` | Build Graph for the shared `/graph/` route |
+| `just frontend-build` | Build both hosted frontends |
+| `just host-start [services…]` | Build and start Compose services in the background |
+| `just host-up [services…]` | Build and run Compose services in the foreground |
 | `just host-down` | Stop the hosted container app |
 | `just host-reset` | Stop the hosted container app and remove its local database volume |
-| `just host-build` | Build the hosted container image |
-| `just host-logs` | Follow hosted container logs |
-| `just host-ps` | Show hosted container status |
+| `just host-build [services…]` | Build Compose service images |
+| `just host-logs [services…]` | Follow Compose logs |
+| `just host-ps` | Show running and stopped Compose containers |
+| `just k3s-publish IMAGE PLATFORM` | Build and push a tagged app image for the target platform |
+| `just k3s-rollout` | Wait for Postgres and the combined app |
+| `just k3s-logs` | Follow the combined app deployment logs |
 | `just k3s-render` | Render the k3s manifests with kustomize |
 | `just k3s-apply` | Apply the k3s manifests |
 | `just k3s-status` | Show k3s deployment status |
@@ -478,7 +457,11 @@ tests/
   test_database.py
   test_projmgmt_database.py
 web/
-  src/          React planner UI
+  src/planner/  React planner view
+  src/projects/ React project management view
+obsidian-arrow/ Graph frontend and standalone container setup
+deploy/k3s/     Combined app, Postgres, ingress, and backup manifests
+docker-compose.yml
 justfile
 planner.spec
 pyproject.toml

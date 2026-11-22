@@ -44,7 +44,7 @@ test("restores a hosted Graph backup with attachment bytes in a fresh browser pr
 async function openProjects(page) {
   await page
     .getByRole("navigation", { name: "Application views" })
-    .getByRole("button", { name: "Projects" })
+    .getByRole("link", { name: "Projects" })
     .click();
   await expect(page.getByText("Project Management")).toBeVisible();
 }
@@ -83,7 +83,7 @@ test("loads the planner, project manager, and API reference", async ({ page }) =
 
   await page
     .getByRole("navigation", { name: "Application views" })
-    .getByRole("button", { name: "API" })
+    .getByRole("link", { name: "API" })
     .click();
   await expect(page.getByRole("heading", { name: "Local API" })).toBeVisible();
 
@@ -92,6 +92,24 @@ test("loads the planner, project manager, and API reference", async ({ page }) =
   await expect(page.getByText("Web Projects")).toBeVisible();
   await page.getByLabel("Close shortcuts").click();
   await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeHidden();
+});
+
+test("navigates between tools and restores Projects from its URL", async ({ page }) => {
+  await page.goto("/");
+  const navigation = page.getByRole("navigation", { name: "Application views" });
+  await openProjects(page);
+  await expect(page).toHaveURL(/\?view=projects$/);
+  await page.reload();
+  await expect(navigation.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+  await navigation.getByRole("link", { name: "Graph" }).click();
+  await expect(page).toHaveURL(/\/graph\/$/);
+  await expect(navigation.getByRole("link", { name: "Graph" })).toHaveAttribute("aria-current", "page");
+  await navigation.getByRole("link", { name: "Planner" }).click();
+  await expect(page.getByText("Daily Planner")).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/graph\/$/);
+  await navigation.getByRole("link", { name: "Projects" }).click();
+  await expect(page.getByText("Project Management")).toBeVisible();
 });
 
 test("edits Gantt dates and surfaces derived schedule conflicts", async ({
@@ -228,7 +246,7 @@ test("assigns a project card to a future planner priority", async ({
   await expect(page.getByRole("heading", { name: "Edit Card" })).toBeHidden();
   await page
     .getByRole("navigation", { name: "Application views" })
-    .getByRole("button", { name: "Planner" })
+    .getByRole("link", { name: "Planner" })
     .click();
   await page.getByLabel("Planner date").fill("2031-01-15");
   await expect(page.locator(".priority-row input").first()).toHaveValue(
@@ -252,7 +270,7 @@ test("assigns a project card to a future planner priority", async ({
 
   await page
     .getByRole("navigation", { name: "Application views" })
-    .getByRole("button", { name: "Planner" })
+    .getByRole("link", { name: "Planner" })
     .click();
   await page.getByLabel("Planner date").fill("2031-01-16");
   await expect(page.getByRole("button", { name: "Card", exact: true })).toBeVisible();

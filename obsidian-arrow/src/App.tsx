@@ -440,7 +440,15 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={import.meta.env.BASE_URL === "/graph/" ? "app-shell hosted" : "app-shell"}>
+      {import.meta.env.BASE_URL === "/graph/" && (
+        <nav className="app-tabs" aria-label="Application views">
+          <a href="/">Planner</a>
+          <a href="/?view=projects">Projects</a>
+          <a href="/graph/" aria-current="page">Graph</a>
+          <a href="/?view=api">API</a>
+        </nav>
+      )}
       <Toolbar
         documentTitle={document.title}
         saveStatus={saveState.status}

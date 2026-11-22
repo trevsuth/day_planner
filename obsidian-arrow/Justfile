@@ -6,7 +6,7 @@ default:
     just --list
 
 install:
-    npm install
+    npm ci
 
 dev:
     npm run dev -- --host 127.0.0.1

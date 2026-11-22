@@ -19,14 +19,15 @@ Before applying it, replace these placeholders:
 - `planner.example.com` in `ingress.yaml`
 - `change-me` values in `secret.yaml`
 
-Build and push the image:
+Build and push the image from the repository root after authenticating to the
+registry. Match the tag to `kustomization.yaml` and the platform to the target
+nodes. Use `linux/arm64` for ARM64 nodes or `linux/amd64` for x86-64 nodes.
 
 ```bash
-docker build -t registry.example.com/daily-planner:YOUR_RELEASE_TAG .
-docker push registry.example.com/daily-planner:YOUR_RELEASE_TAG
+just k3s-publish registry.example.com/daily-planner:YOUR_RELEASE_TAG linux/arm64
 ```
 
-Deploy:
+Check `kubectl config current-context` before deploying. Then render and apply:
 
 ```bash
 just k3s-render
@@ -36,8 +37,7 @@ just k3s-apply
 Check rollout:
 
 ```bash
-kubectl -n daily-planner rollout status statefulset/postgres
-kubectl -n daily-planner rollout status deployment/daily-planner
+just k3s-rollout
 just k3s-status
 ```
 
@@ -47,9 +47,11 @@ access controls.
 
 ### Move an existing graph
 
-1. Rebuild Obsidian Arrow and open it on its original browser origin using the
-   same protocol, hostname, and port where the graph was saved. For the root
-   Compose stack this is usually `http://localhost:8081`.
+1. From the repository root, run `just host-start obsidian-arrow` and open
+   Obsidian Arrow on its original browser origin using the same protocol,
+   hostname, and port where the graph was saved. For the root Compose stack
+   this is usually `http://localhost:8081`. If you used the standalone stack
+   inside `obsidian-arrow/`, rebuild it there with `just docker-up-detached`.
 2. Select **Export backup** to download the graph and its attachment files. If
    the export reports a missing file, recover it from the original copy or use
    **Export JSON** to transfer the graph and attachment metadata alone.
@@ -60,12 +62,12 @@ access controls.
 Graph data remains in the browser profile. The scheduled Postgres dump covers
 planner and project data. Use **Export backup** for Graph.
 
-The `just` helpers wrap these commands:
+Follow app logs with `just k3s-logs`. The render and apply helpers wrap these
+commands:
 
 ```bash
 kubectl kustomize deploy/k3s
 kubectl apply -k deploy/k3s
-kubectl -n daily-planner get ingress,pods,pvc,cronjob
 ```
 
 Restore a backup:

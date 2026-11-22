@@ -98,6 +98,40 @@ select option {
     #020711;
 }
 
+.app-shell.hosted {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100dvh;
+}
+
+.app-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 0.6rem;
+  border-bottom: 1px solid var(--line);
+  background: #061015;
+}
+
+.app-tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.app-tabs a[aria-current="page"] {
+  border-color: var(--line);
+  background: linear-gradient(135deg, #1f5262, #0c232d);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--line-strong);
+}
+
 .toolbar {
   display: flex;
   align-items: center;

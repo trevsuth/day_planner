@@ -1,14 +1,17 @@
 Local Graph Wiki
 ================
 
-A local-first visual graph and wiki application inspired by arrows.app. The first version runs entirely in the browser with React, TypeScript, Vite, an SVG graph canvas, and `localStorage` persistence.
+A local-first visual graph and wiki application inspired by arrows.app. It runs
+in the browser with React, TypeScript, Vite, and an SVG graph canvas. The
+combined project serves Graph at `/graph/` alongside Planner and Projects.
+See the [root README](../README.md) for Compose and k3s setup.
 
 Run it
 ------
 
 ```bash
-npm install
-npm run dev
+just install
+just dev
 ```
 
 Then open the local URL printed by Vite.
@@ -16,10 +19,10 @@ Then open the local URL printed by Vite.
 Run with Docker
 ---------------
 
-Build and serve the production app on port `8080`:
+From `obsidian-arrow/`, build and serve the standalone app on port `8080`:
 
 ```bash
-docker compose up --build
+just docker-up-detached
 ```
 
 Then open `http://localhost:8080`. To expose a different host port:
@@ -30,12 +33,24 @@ ARROWSAPP_PORT=8090 docker compose up --build
 
 For LAN access, open `http://<host-machine-ip>:8080` from another machine on the same network.
 
-The container serves the static app only. Graph data and attachment bytes are still stored per browser profile using `localStorage` and IndexedDB, so use JSON export/import when moving data between machines until a shared backend is added.
+From the repository root, `just host-start obsidian-arrow` starts the standalone
+Compose service on port `8081` by default. Use the same origin where you saved
+the graph when recovering browser data.
+
+Backup and migration
+--------------------
+
+The browser stores the graph in `localStorage` and attachment bytes in
+IndexedDB, scoped to the browser profile and origin. On the old URL, select
+**Export backup** to include the graph and its attachment files. On the new URL,
+select **Import JSON** to replace the open graph with that backup. **Export JSON**
+exports the graph and attachment metadata alone. Graph backups are separate
+from the Planner Postgres backups.
 
 Developer shortcuts
 -------------------
 
-This repo includes a `Justfile` for common commands:
+The `Justfile` in this directory manages standalone Graph development:
 
 ```bash
 just install
@@ -46,6 +61,9 @@ just docker-down
 ```
 
 Run `just` to list every available recipe.
+
+From the repository root, use `just graph-dev` for standalone hot reload or
+`just graph-build` to build the bundle for the combined `/graph/` route.
 
 Build it
 --------
@@ -70,8 +88,4 @@ Architecture
 Next steps
 ----------
 
-- Add undo/redo by storing command history or immutable document snapshots.
-- Add richer relationship creation affordances, pan/zoom, and canvas fit controls.
-- Replace the simple markdown renderer with a parser such as `remark` once dependencies are acceptable.
-- Wire `TauriStorageRepository` to Rust commands when adding the Tauri shell.
-- Add tests around graph operations, persistence migrations, and SQLite snapshot conversion.
+See [todo.md](todo.md) for planned work.

@@ -84,6 +84,7 @@ button:disabled {
 
 .app-tabs {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 5px;
   border: 1px solid var(--line);
@@ -94,7 +95,7 @@ button:disabled {
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
 }
 
-.app-tabs button {
+.app-tabs :is(a, button) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -106,9 +107,10 @@ button:disabled {
   font-size: 0.88rem;
   font-weight: 800;
   text-transform: uppercase;
+  text-decoration: none;
 }
 
-.app-tabs button.active {
+.app-tabs a[aria-current="page"] {
   border-color: rgba(91, 210, 234, 0.58);
   background: linear-gradient(135deg, rgba(31, 82, 98, 0.95), rgba(12, 35, 45, 0.95));
   color: var(--text);
@@ -3013,7 +3015,7 @@ textarea {
     width: 100%;
   }
 
-  .app-tabs button {
+  .app-tabs :is(a, button) {
     flex: 1;
     justify-content: center;
   }

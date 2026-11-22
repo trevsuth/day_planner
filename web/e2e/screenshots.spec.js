@@ -113,7 +113,7 @@ async function seedReadmeData(request) {
 async function openProjects(page) {
   await page
     .getByRole("navigation", { name: "Application views" })
-    .getByRole("button", { name: "Projects" })
+    .getByRole("link", { name: "Projects" })
     .click();
   await expect(page.getByText("Project Management")).toBeVisible();
 }
