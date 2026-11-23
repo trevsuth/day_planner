@@ -27,7 +27,7 @@ flowchart LR
 | `obsidian-arrow/` | Independently buildable Graph editor. Hosted mode uses the suite API. Standalone mode retains its own storage adapters. |
 | `viewer/` | Browser-side Markdown and Mermaid rendering at `/viewer/`. Source files stay in the browser. |
 | `app_planner/`, `app_projmgmt/`, `app_graph/` | One FastAPI application. Routers handle HTTP, services enforce application rules, and persistence modules use SQL through psycopg. The Textual client shares Planner and Projects application code. |
-| `app_validation/` | Stateless document, character, and Python regex operations used by the web UI, API, and MCP. Python regex runs in a time-limited subprocess. |
+| `app_validation/` | Stateless document, character, Python regex, SQL translation, JSON Schema, XSD, and config diff operations used by the web UI, API, and MCP. Python regex and schema checks run in time-limited subprocesses. |
 | `app_viewer/` | Stateless Markdown preview API and Mermaid source extraction for programmatic callers. |
 | `app_planner/mcp_server.py` | Optional stdio and loopback HTTP process that calls suite services directly. Tools are read-only by default. |
 | Nginx | Serves all hosted static bundles from one image. Compose also uses it as the same-origin API proxy. Independent frontend builds preserve local development workflows. |
@@ -40,6 +40,8 @@ checks the revision and stores document and attachment changes in one
 transaction. Most API operations use short-lived psycopg connections scoped
 to the operation. Database configuration comes from the environment.
 Optional `DATABASE_SCHEMA` isolates schemas for development and tests.
+Suite search queries Planner, Projects, and hosted Graph in PostgreSQL.
+A project card may store the ID of a Graph note as its runbook link.
 
 Versioned SQL has one migration runner. The k3s release Job and Compose
 migration service run that command before application rollout. Workstation

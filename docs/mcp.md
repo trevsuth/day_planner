@@ -34,6 +34,11 @@ environment if the default local Compose database is unsuitable.
 | `validate_document` | Checks and optionally formats JSON, XML, YAML, and TOML. |
 | `inspect_invisible_characters` | Reports invisible characters and previews selected removals. |
 | `find_python_regex_matches` | Runs a bounded Python regex and returns match and capture spans. |
+| `translate_sql_text` | Formats or translates SQL text between supported dialects. |
+| `check_json_schema` | Checks JSON against an inline Draft 2020-12 schema. |
+| `check_xml_schema` | Checks XML against a self-contained XSD 1.0 schema. |
+| `compare_config_text` | Formats and compares JSON or YAML configuration text. |
+| `search_suite` | Searches Planner entries, project cards, and hosted Graph notes. |
 
 To opt into writes, set `DAY_PLANNER_MCP_WRITES=1` in the MCP process
 environment. It adds `create_project_card` and `assign_card_to_planner`.

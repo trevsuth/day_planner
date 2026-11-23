@@ -449,6 +449,7 @@ test("shows the same module selector in every hosted view", async ({ page }) => 
     ["Graph", "/graph/"],
     ["Viewer", "/viewer/"],
     ["Validation", "/?view=validation"],
+    ["Search", "/?view=search"],
     ["API", "/?view=api"],
   ]);
   const navigation = page.getByRole("navigation", { name: "Application views" });
@@ -471,4 +472,141 @@ test("shows the same module selector in every hosted view", async ({ page }) => 
     await popup.close();
     await expect(page).toHaveURL((location) => location.pathname === url);
   }
+});
+
+test("translates Snowflake SQL to BigQuery and checks JSON Schema paths", async ({ page }) => {
+  await page.goto("/?view=validation");
+  const tool = page.locator(".validation-tool:visible");
+  await page.getByRole("button", { name: "SQL Translate & Format" }).click();
+  await tool.getByLabel("Source dialect").selectOption("snowflake");
+  await tool.getByLabel("Target dialect").selectOption("bigquery");
+  await tool.getByLabel("Source text").fill("SELECT DATEADD(day, 1, TO_DATE('2025-01-01'))");
+  await tool.getByRole("button", { name: "Translate SQL" }).click();
+  await expect(tool.getByLabel("SQL output")).toHaveValue(/DATE_ADD.*INTERVAL 1 DAY/);
+
+  await page.getByRole("button", { name: "JSON Schema", exact: true }).click();
+  await tool.getByLabel("Source text").fill('{"items":[{"dueDate":4}]}');
+  await tool.getByLabel("JSON Schema (Draft 2020-12)").fill(
+    '{"properties":{"items":{"items":{"properties":{"dueDate":{"type":"string"}}}}}}',
+  );
+  await tool.getByRole("button", { name: "Check against schema" }).click();
+  await expect(tool.getByText("$.items[0].dueDate", { exact: true })).toBeVisible();
+  await expect(tool.getByRole("alert")).toContainText("4 is not of type 'string'");
+});
+
+test("downloads a rendered Mermaid diagram as SVG and PNG", async ({ page }) => {
+  await page.goto("/viewer/");
+  const controls = page.getByRole("group", { name: "Export diagram 1" });
+  for (const [format, signature] of [["SVG", "<svg"], ["PNG", "\x89PNG\r\n\x1a\n"]]) {
+    const downloaded = page.waitForEvent("download");
+    await controls.getByRole("button", { name: `Download ${format}` }).click();
+    const download = await downloaded;
+    expect(download.suggestedFilename()).toBe(`diagram-1.${format.toLowerCase()}`);
+    const bytes = await readFile(await download.path());
+    expect(bytes.includes(Buffer.from(signature, "latin1"))).toBeTruthy();
+  }
+});
+
+test("validates XML with an XSD and reports the element path", async ({ page }) => {
+  await page.goto("/?view=validation");
+  const tool = page.locator(".validation-tool:visible");
+  await page.getByRole("button", { name: "XML Schema", exact: true }).click();
+  await tool.getByLabel("XML Schema (XSD 1.0)").fill(
+    '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">' +
+    '<xs:element name="count" type="xs:integer"/></xs:schema>',
+  );
+  await tool.getByLabel("Source text").fill("<count>seven</count>");
+  await tool.getByRole("button", { name: "Check against schema" }).click();
+  await expect(tool.getByText("/count", { exact: true })).toBeVisible();
+  await expect(tool.getByRole("alert")).toContainText("Line 1");
+  await tool.getByLabel("Source text").fill("<count>7</count>");
+  await tool.getByRole("button", { name: "Check against schema" }).click();
+  await expect(tool.getByRole("status")).toHaveText("XML satisfies the schema.");
+});
+
+test("search opens the matching Planner day, project card, and Graph runbook", async ({ page, request }) => {
+  const phrase = "Beacon recovery";
+  const date = "2032-02-10";
+  expect((await request.put(`/api/planner/entries/${date}`, { data: { entry_date: date, notes: phrase } })).ok()).toBeTruthy();
+  const project = await (await request.post("/api/projmgmt/projects", { data: { name: "Beacon lab" } })).json();
+  const card = await createCard(request, { title: phrase, project_id: project.id, card_type: "epic" });
+  const workspace = await (await request.get("/api/graphs/workspace")).json();
+  const timestamp = "2032-02-10T12:00:00Z";
+  const node = {
+    id: "beacon-runbook", title: "Beacon recovery runbook", x: 350, y: 260,
+    labels: [], tags: [], attachments: [],
+    content: { type: "note", markdown: "## Restore the beacon", updatedAt: timestamp },
+    style: { radius: 45, fill: "#123730", stroke: "#73efba", textColor: "#e5fbff" },
+  };
+  expect((await request.put("/api/graphs/workspace", { data: {
+    revision: workspace.revision,
+    document: {
+      schemaVersion: 1, id: "beacon-doc", title: "Lab", createdAt: timestamp, updatedAt: timestamp,
+      relationships: [], nodes: [node],
+    },
+  } })).ok()).toBeTruthy();
+
+  await page.goto("/");
+  await expect(page.getByLabel("Planner date")).toBeVisible();
+  await page.keyboard.press("Control+Shift+K");
+  await page.getByRole("searchbox").fill(phrase);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const planner = page.getByRole("link", { name: date, exact: true });
+  await expect(planner).toBeVisible();
+  const cardLink = page.getByRole("link", { name: phrase, exact: true });
+  const noteLink = page.getByRole("link", { name: node.title });
+  const cardUrl = await cardLink.getAttribute("href");
+  const noteUrl = await noteLink.getAttribute("href");
+  await planner.click();
+  await expect(page.getByLabel("Planner date")).toHaveValue(date);
+  await page.goto(noteUrl);
+  await expect(page.getByRole("heading", { name: "Restore the beacon" })).toBeVisible();
+
+  await page.goto(cardUrl);
+  const preview = page.getByRole("complementary", { name: "Selected card preview" });
+  await expect(preview.getByRole("heading", { name: phrase })).toBeVisible();
+  await preview.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Choose a Graph note" }).click();
+  await page.getByLabel("Linked Graph note").selectOption(node.id);
+  const savedResponse = page.waitForResponse((response) =>
+    response.request().method() === "PUT" && response.url().endsWith(`/api/projmgmt/cards/${card.id}`),
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const saved = await (await savedResponse).json();
+  expect(saved.graph_node_id).toBe(node.id);
+  await page.goto(cardUrl);
+  await expect(preview.getByRole("link", { name: "Open Graph runbook" })).toHaveAttribute("href", noteUrl);
+
+  await page.getByLabel("Primary project actions").getByRole("button", { name: "Card", exact: true }).click();
+  await page.getByLabel("Card template").selectOption("service-upgrade");
+  await page.getByRole("button", { name: "Apply template" }).click();
+  await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Service upgrade");
+  await expect(page.locator('input[value="Verify backup"]')).toBeVisible();
+});
+
+test("compares formatted configs and exports a printable offline Viewer document", async ({ page }) => {
+  await page.goto("/?view=validation");
+  await page.getByRole("button", { name: "Config Diff" }).click();
+  await page.getByLabel("Before", { exact: true }).fill('{"port":80}');
+  await page.getByLabel("After", { exact: true }).fill('{"port" : 443}');
+  await page.getByRole("button", { name: "Compare configs" }).click();
+  const comparison = page.getByRole("table", { name: "Formatted comparison" });
+  await expect(comparison.locator(".diff-replace")).toContainText('"port": 443');
+
+  await page.goto("/viewer/");
+  await page.getByLabel("Format").selectOption("markdown");
+  await page.getByLabel("Source").fill("# Lab runbook\n\n```mermaid\nflowchart LR\nA-->B\n```");
+  await expect(page.locator("#preview .diagram img")).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download HTML" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("viewer-export.html");
+  const html = await readFile(await file.path(), "utf8");
+  expect(html).toContain("<h1>Lab runbook</h1>");
+  expect(html).toContain("data:image/svg+xml;base64,");
+  expect(html).not.toContain("blob:");
+  await page.emulateMedia({ media: "print" });
+  await expect(page.getByRole("navigation", { name: "Application views" })).toBeHidden();
+  await expect(page.locator("#source-pane")).toBeHidden();
+  await expect(page.locator("#preview").getByRole("heading", { name: "Lab runbook" })).toBeVisible();
 });

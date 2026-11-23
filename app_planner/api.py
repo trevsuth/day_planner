@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app_graph.api import router as graph_router
 from app_planner.migrate import check_schema
 from app_planner.observability import RequestLogMiddleware
+from app_planner.search import router as search_router
 from app_planner.routes import router as planner_router
 from app_projmgmt.api import router as project_router
 from app_validation.api import router as validation_router
@@ -39,6 +40,7 @@ app.include_router(project_router)
 app.include_router(graph_router)
 app.include_router(viewer_router)
 app.include_router(validation_router)
+app.include_router(search_router)
 
 
 @app.get("/api/livez")
@@ -65,7 +67,9 @@ if GRAPH_DIST_DIR.exists():
     app.mount("/graph", StaticFiles(directory=GRAPH_DIST_DIR, html=True), name="graph")
 
 if VIEWER_DIST_DIR.exists():
-    app.mount("/viewer", StaticFiles(directory=VIEWER_DIST_DIR, html=True), name="viewer")
+    app.mount(
+        "/viewer", StaticFiles(directory=VIEWER_DIST_DIR, html=True), name="viewer"
+    )
 
 
 @app.get("/")

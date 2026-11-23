@@ -41,6 +41,7 @@ def card_from_row(row) -> ProjectCard:
         parent_id=row["parent_id"],
         dependency_ids=row["dependency_ids"],
         deliverables=row["deliverables"],
+        graph_node_id=row["graph_node_id"],
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
@@ -195,10 +196,10 @@ def create_card(data: ProjectCardCreate) -> ProjectCard:
             """
             INSERT INTO project_cards (
                 id, project_id, card_type, title, description, comments, status,
-                start_date, due_date, parent_id, dependency_ids, deliverables,
+                start_date, due_date, parent_id, dependency_ids, deliverables, graph_node_id,
                 created_at, updated_at
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             serialize_card(card),
         )
@@ -219,7 +220,7 @@ def update_cards(cards: list[ProjectCard]) -> list[ProjectCard]:
                 UPDATE project_cards
                 SET card_type = %s, title = %s, description = %s, comments = %s,
                     status = %s, start_date = %s, due_date = %s, parent_id = %s,
-                    dependency_ids = %s, deliverables = %s, updated_at = %s
+                    dependency_ids = %s, deliverables = %s, graph_node_id = %s, updated_at = %s
                 WHERE id = %s
                 """,
                 (
@@ -233,6 +234,7 @@ def update_cards(cards: list[ProjectCard]) -> list[ProjectCard]:
                     card.parent_id,
                     Jsonb(card.dependency_ids),
                     Jsonb(card.deliverables),
+                    card.graph_node_id,
                     card.updated_at,
                     card.id,
                 ),
@@ -265,6 +267,7 @@ def serialize_card(card: ProjectCard) -> tuple[object, ...]:
         card.parent_id,
         Jsonb(card.dependency_ids),
         Jsonb(card.deliverables),
+        card.graph_node_id,
         card.created_at,
         card.updated_at,
     )
@@ -326,10 +329,10 @@ def replace_project_data(
                 """
                 INSERT INTO project_cards (
                     id, project_id, card_type, title, description, comments, status,
-                    start_date, due_date, parent_id, dependency_ids, deliverables,
+                    start_date, due_date, parent_id, dependency_ids, deliverables, graph_node_id,
                     created_at, updated_at
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 serialize_card(card),
             )

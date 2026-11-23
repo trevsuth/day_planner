@@ -106,7 +106,15 @@ const viewerEndpoints = [
   { method: "POST", path: "/api/viewer/preview", purpose: "Convert Markdown to HTML and extract Mermaid source. The browser can render the returned diagrams." },
 ];
 
+const searchEndpoints = [
+  { method: "GET", path: "/api/search?q=term", purpose: "Find Planner entries, project cards, and Graph notes." },
+];
+
 const validationEndpoints = [
+  { method: "POST", path: "/api/validation/config-diff", purpose: "Normalize and compare two JSON or YAML documents." },
+  { method: "POST", path: "/api/validation/xml-schema", purpose: "Validate XML against a self-contained XSD 1.0 schema." },
+  { method: "POST", path: "/api/validation/sql", purpose: "Format SQL or translate it between six dialects, including Snowflake and Google BigQuery." },
+  { method: "POST", path: "/api/validation/schema", purpose: "Validate JSON against a Draft 2020-12 schema and report issue paths." },
   { method: "POST", path: "/api/validation/document", purpose: "Validate JSON, XML, YAML, or TOML and optionally return formatted text." },
   { method: "POST", path: "/api/validation/characters", purpose: "Find invisible characters and optionally remove selected offsets." },
   { method: "POST", path: "/api/validation/regex", purpose: "Find matches and capture groups using Python regex." },
@@ -152,6 +160,7 @@ export function ApiReference() {
         <ApiEndpointSection title="Graph" endpoints={graphEndpoints} />
         <ApiEndpointSection title="Viewer" endpoints={viewerEndpoints} />
         <ApiEndpointSection title="Validation" endpoints={validationEndpoints} />
+        <ApiEndpointSection title="Search" endpoints={searchEndpoints} />
 
         <section className="api-panel">
           <h2>Planner Entry</h2>

@@ -57,7 +57,11 @@ export default function App({ initialDocument, hostedStorage }: AppProps) {
   const [saveAttempt, setSaveAttempt] = useState(0);
   const dragStartDocumentRef = useRef<GraphDocument | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const [selection, setSelection] = useState<Selection>(null);
+  const linkedNodeId = hostedStorage ? new URLSearchParams(location.search).get("node") : null;
+  const [selection, setSelection] = useState<Selection>(() =>
+    linkedNodeId && initialDocument?.nodes.some((node) => node.id === linkedNodeId)
+      ? { kind: "node", id: linkedNodeId } : null,
+  );
   const [pendingRelationshipFromId, setPendingRelationshipFromId] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<GraphFragment | null>(null);
   const [history, setHistory] = useState<{ past: GraphDocument[]; future: GraphDocument[] }>({
@@ -192,6 +196,11 @@ export default function App({ initialDocument, hostedStorage }: AppProps) {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (hostedStorage && (event.metaKey || event.ctrlKey) && event.shiftKey && event.code === "KeyK") {
+        event.preventDefault();
+        window.open("/?view=search", "_blank", "noopener");
+        return;
+      }
       const target = event.target as HTMLElement | null;
       const isTextInput =
         target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT";
@@ -280,7 +289,7 @@ export default function App({ initialDocument, hostedStorage }: AppProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [clipboard, document, history, selection]);
+  }, [clipboard, document, history, hostedStorage, selection]);
 
   const selectedNode =
     selection?.kind === "node" ? document.nodes.find((node) => node.id === selection.id) : undefined;
@@ -495,6 +504,8 @@ export default function App({ initialDocument, hostedStorage }: AppProps) {
   return (
     <main className="app-shell">
       {hostedStorage && <GraphNavigation />}
+      {linkedNodeId && !document.nodes.some((node) => node.id === linkedNodeId) &&
+        <p role="status">The linked Graph note is no longer available.</p>}
       <Toolbar
         documentTitle={document.title}
         saveStatus={saveState.status}

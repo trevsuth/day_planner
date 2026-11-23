@@ -18,7 +18,10 @@ import { IconButton, Section, StatusLine } from "../shared/components";
 
 export function PlannerApp({ onOpenLinkedCard }) {
   const today = useMemo(() => formatDateInput(new Date()), []);
-  const [entryDate, setEntryDate] = useState(today);
+  const [entryDate, setEntryDate] = useState(() => {
+    const date = new URLSearchParams(location.search).get("date");
+    return date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : today;
+  });
   const [entry, setEntry] = useState(() => normalizeEntry({}, today));
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");

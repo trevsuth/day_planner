@@ -3151,3 +3151,30 @@ textarea {
   display: grid;
   gap: 1rem;
 }
+
+.validation-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.validation-comparison-pane {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.suite-search-results { display: grid; gap: 1rem; padding-left: 1.2rem; }
+.suite-search-results span { margin-right: 1rem; color: var(--muted); }
+.suite-search-results a { color: var(--line-strong); }
+.suite-search-results p { margin: 0.35rem 0 0; overflow-wrap: anywhere; }
+
+.config-diff-scroll { overflow-x: auto; }
+.config-diff { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.config-diff th, .config-diff td { border: 1px solid var(--line); padding: 0.35rem 0.55rem; text-align: left; }
+.config-diff td { vertical-align: top; }
+.config-diff code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.config-diff td span { display: inline-block; min-width: 3ch; color: var(--muted); margin-right: 0.5rem; }
+.config-diff :is(.diff-delete, .diff-replace) td:first-child { background: rgb(151 36 48 / 0.35); }
+.config-diff :is(.diff-insert, .diff-replace) td:last-child { background: rgb(34 115 78 / 0.35); }

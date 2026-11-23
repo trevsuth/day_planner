@@ -42,7 +42,8 @@ project card to a dated priority and open it directly from the planner. The
 
 Organize work into epics, features, stories, and subtasks. Use the board,
 calendar, timeline, or Gantt view to track work and dependencies. The
-[Projects guide](docs/projects.md) covers cards, CSV imports, and shortcuts.
+[Projects guide](docs/projects.md) covers cards, templates, Graph runbooks,
+and CSV imports.
 
 ### Graph
 
@@ -52,16 +53,25 @@ workspace, standalone browser storage, and import and export.
 
 ### Viewer
 
-Preview Markdown and Mermaid diagrams from pasted source or local files.
+Preview Markdown and Mermaid diagrams from pasted source or local files,
+export diagrams as SVG or PNG, and save or print the full preview.
 The [Viewer guide](viewer/README.md) covers diagram presets, preview navigation,
 and the programmatic preview API.
 
 ### Validation
 
 Check and format JSON, XML, YAML, and TOML, inspect and selectively remove
-invisible characters, or highlight regex matches in Python and JavaScript.
+invisible characters, highlight regex matches in Python and JavaScript,
+or validate JSON and XML against schemas. Translate or format SQL across six
+dialects, including Snowflake and Google BigQuery, or compare JSON and YAML
+configurations side by side.
 The [Validation guide](docs/validation.md) includes examples and API and MCP
 request details.
+
+### Search
+
+Find Planner entries, project cards, and Graph notes in one place. The
+[Search guide](docs/search.md) lists searchable fields and keyboard shortcuts.
 
 ### API and MCP
 

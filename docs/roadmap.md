@@ -4,22 +4,11 @@
 
 Keep the application lightweight in day-to-day use:
 
-- Prefer fast capture, clear scheduling, and reliable local data over additional views.
+- Keep Planner focused on daily capture and scheduling.
+- Prefer reliable local data over additional views.
 - Keep infrequent administration behind compact drawers, panels, or command recipes.
 - Add new concepts only when they reduce repeated manual work in both the web app and TUI.
 - Do not maintain completed work in this file; completed changes are recorded in git history.
-
-## Immediate
-
-1. Add recurring planner tasks
-   - Support daily, weekly, and monthly recurrence with an optional end date.
-   - Keep exceptions and skipped occurrences simple and understandable.
-   - Make recurrence visible in both the web planner and TUI without cluttering daily capture.
-
-2. Add reusable card templates
-   - Pre-fill descriptions and deliverables for common card types.
-   - Allow optional starter child cards.
-   - Keep templates optional and out of the primary creation flow.
 
 ## Next
 
@@ -61,9 +50,3 @@ Keep the application lightweight in day-to-day use:
 2. Add structured application settings
    - Configure CORS and frontend hostnames only when non-local deployments require it.
    - Keep deployment-specific settings in environment configuration.
-
-3. Evaluate shared Graph storage
-   - Decide whether Graph data and attachment files should sync between browser profiles or devices.
-
-4. Evaluate an MCP server
-   - Expose planner and project actions only after data contracts and backup behavior are stable.

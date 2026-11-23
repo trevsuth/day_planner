@@ -5,6 +5,7 @@ import graphIcon from "lucide-static/icons/git-branch.svg?raw";
 import viewerIcon from "lucide-static/icons/file-text.svg?raw";
 import validationIcon from "lucide-static/icons/clipboard-check.svg?raw";
 import shortcutsIcon from "lucide-static/icons/circle-help.svg?raw";
+import searchIcon from "lucide-static/icons/search.svg?raw";
 import apiIcon from "lucide-static/icons/clipboard-list.svg?raw";
 import fileIcon from "lucide-static/icons/folder-open.svg?raw";
 import sourceIcon from "lucide-static/icons/square-pen.svg?raw";
@@ -14,6 +15,8 @@ import restoreIcon from "lucide-static/icons/minimize.svg?raw";
 import zoomInIcon from "lucide-static/icons/zoom-in.svg?raw";
 import zoomOutIcon from "lucide-static/icons/zoom-out.svg?raw";
 import handIcon from "lucide-static/icons/hand.svg?raw";
+import { exportDocument } from "./document-export.js";
+import { diagramExportControls } from "./diagram-export.js";
 import { diagramExamples } from "./diagram-examples.js";
 import { enablePreviewNavigation } from "./preview-navigation.js";
 import "./styles.css";
@@ -25,6 +28,7 @@ const icons = {
   viewer: viewerIcon,
   validation: validationIcon,
   api: apiIcon,
+  search: searchIcon,
   shortcuts: shortcutsIcon,
   file: fileIcon,
   source: sourceIcon,
@@ -47,6 +51,11 @@ const preview = document.querySelector("#preview");
 const workspace = document.querySelector("#viewer-workspace");
 const sourcePane = document.querySelector("#source-pane");
 const previewSize = document.querySelector("#preview-size");
+const exportHtml = document.querySelector("#export-html");
+const printPreview = document.querySelector("#print-preview");
+const exportStatus = document.querySelector("#document-export-status");
+const diagramBlobs = new WeakMap();
+const standaloneExport = document.querySelector("#standalone-export");
 const fileError = document.querySelector("#file-error");
 const maxSourceSize = 100_000;
 const drafts = new Map(diagramExamples.map(({ id, source }) => [id, source]));
@@ -67,6 +76,11 @@ function setPreviewExpanded(expanded) {
 previewSize.addEventListener("click", () => setPreviewExpanded(!sourcePane.hidden));
 enablePreviewNavigation(document.querySelector("#preview-viewport"), preview, mode);
 document.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === "KeyK") {
+    event.preventDefault();
+    window.open("/?view=search", "_blank", "noopener");
+    return;
+  }
   if (event.key === "Escape" && sourcePane.hidden) {
     setPreviewExpanded(false);
     previewSize.focus();
@@ -113,18 +127,23 @@ function loadMermaid() {
   return mermaidModule;
 }
 
-async function renderDiagram(container, version) {
+async function renderDiagram(container, version, number) {
   try {
     const mermaid = await loadMermaid();
     if (version !== renderVersion) return;
     const { svg } = await mermaid.render(`viewer-diagram-${++nextDiagramId}`, container.dataset.diagram);
     if (version !== renderVersion) return;
-    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
     imageUrls.push(url);
     const image = new Image();
     image.src = url;
     image.alt = "Mermaid diagram";
+    diagramBlobs.set(image, blob);
+    const controls = diagramExportControls({ image, svg, blob, number });
     container.replaceChildren(image);
+    if (mode.value === "mermaid") standaloneExport.replaceChildren(controls);
+    else container.append(controls);
   } catch (error) {
     if (version !== renderVersion) return;
     const message = document.createElement("p");
@@ -150,15 +169,25 @@ async function render(version) {
   } else {
     preview.innerHTML = markdown.render(source.value);
   }
-  for (const container of preview.querySelectorAll(".diagram[data-diagram]")) {
+  const diagrams = Array.from(preview.querySelectorAll(".diagram[data-diagram]"));
+  for (const [index, container] of diagrams.entries()) {
     if (version !== renderVersion) return;
-    await renderDiagram(container, version);
+    await renderDiagram(container, version, index + 1);
+  }
+  if (version === renderVersion) {
+    const exportable = mode.value === "markdown" || Boolean(preview.querySelector(".diagram img"));
+    exportHtml.disabled = !exportable;
+    printPreview.disabled = !exportable;
   }
 }
 
 function scheduleRender() {
   const version = ++renderVersion;
   clearTimeout(timer);
+  standaloneExport.replaceChildren();
+  exportHtml.disabled = true;
+  printPreview.disabled = true;
+  exportStatus.hidden = true;
   timer = setTimeout(() => render(version), 180);
 }
 
@@ -171,6 +200,21 @@ function showDraft() {
   source.value = drafts.get(activeDraft()) ?? "";
   scheduleRender();
 }
+
+exportHtml.addEventListener("click", async () => {
+  const version = renderVersion;
+  exportHtml.disabled = true;
+  exportStatus.hidden = true;
+  try {
+    await exportDocument(preview, diagramBlobs);
+  } catch (error) {
+    exportStatus.textContent = error.message || "Could not export the preview.";
+    exportStatus.hidden = false;
+  } finally {
+    if (version === renderVersion) exportHtml.disabled = false;
+  }
+});
+printPreview.addEventListener("click", () => window.print());
 
 source.addEventListener("input", () => {
   drafts.set(activeDraft(), source.value);

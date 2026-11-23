@@ -18,6 +18,22 @@ The viewer renders in the browser and does not upload or save your source.
 Raw HTML and external images are disabled in the preview. Keep your source in
 a local file if you want to use it again.
 
+## Export diagrams
+
+Select **Download SVG** for a vector image or **Download PNG** for a raster
+image. Each rendered Mermaid diagram has its own controls, including diagrams
+inside Markdown. Export runs in the browser and uses the rendered diagram's
+dimensions regardless of preview zoom. PNG exports use the preview background
+and are capped at 4,096 pixels on the longest side.
+
+## Export or print a document
+
+Select **Download HTML** to save the rendered preview as a self-contained
+file. Mermaid diagrams are embedded and available offline. Other image
+references are replaced with their alt text. Open **Print preview** to print
+the rendered document or use your browser's **Save as PDF** destination.
+The editor and navigation controls are hidden in the print layout.
+
 ## Development and API
 
 From the repository root, `just viewer-dev` starts the standalone Vite

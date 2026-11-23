@@ -20,6 +20,11 @@ def test_mcp_discovers_all_domains_and_previews_documents():
                 "validate_document",
                 "inspect_invisible_characters",
                 "find_python_regex_matches",
+                "translate_sql_text",
+                "check_json_schema",
+                "check_xml_schema",
+                "search_suite",
+                "compare_config_text",
             }
             assert all(tool.annotations.read_only_hint for tool in tools.values())
             response = await client.call_tool(
@@ -46,5 +51,32 @@ def test_mcp_discovers_all_domains_and_previews_documents():
             )
             assert regex.structured_content["group_names"] == {"letter": 1}
             assert regex.structured_content["matches"][0]["start"] == 1
+            sql = await client.call_tool(
+                "translate_sql_text",
+                {
+                    "request": {
+                        "source": "SELECT SAFE_DIVIDE(8, 2)",
+                        "source_dialect": "bigquery",
+                        "target_dialect": "snowflake",
+                    }
+                },
+            )
+            assert "IFF(" in sql.structured_content["formatted"]
+            schema = await client.call_tool(
+                "check_json_schema",
+                {"request": {"source": "2", "schema_source": '{"type":"integer"}'}},
+            )
+            assert schema.structured_content["valid"]
+            xsd = await client.call_tool(
+                "check_xml_schema",
+                {
+                    "request": {
+                        "source": "<n>2</n>",
+                        "schema_source": '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">'
+                        '<xs:element name="n" type="xs:integer"/></xs:schema>',
+                    }
+                },
+            )
+            assert xsd.structured_content["valid"]
 
     asyncio.run(check())

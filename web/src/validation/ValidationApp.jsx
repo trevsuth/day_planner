@@ -4,6 +4,10 @@ const tools = [
   ["document", "Validate & Format"],
   ["characters", "Invisible Characters"],
   ["regex", "Regex Playground"],
+  ["sql", "SQL Translate & Format"],
+  ["schema", "JSON Schema"],
+  ["xml-schema", "XML Schema"],
+  ["config-diff", "Config Diff"],
 ];
 const formats = ["json", "xml", "yaml", "toml"];
 
@@ -64,7 +68,7 @@ function useResult() {
   return { result, pending, clear, run };
 }
 
-function Source({ value, onChange, onFile }) {
+function Source({ value, onChange, onFile, label = "Source text", fileLabel = "Open UTF-8 text file" }) {
   const [error, setError] = useState("");
   const fileRequest = useRef(0);
 
@@ -90,9 +94,9 @@ function Source({ value, onChange, onFile }) {
   }
 
   return <>
-    <label className="validation-file">Open UTF-8 text file <input type="file" onChange={readFile} /></label>
+    <label className="validation-file">{fileLabel} <input type="file" onChange={readFile} /></label>
     {error && <p role="alert">{error}</p>}
-    <label className="validation-editor">Source text
+    <label className="validation-editor">{label}
       <textarea spellCheck={false} value={value} onChange={(event) => {
         fileRequest.current++;
         setError("");
@@ -286,6 +290,130 @@ function RegexPlayground() {
   </form>;
 }
 
+const sqlDialects = [
+  ["postgres", "PostgreSQL"], ["sqlite", "SQLite"], ["duckdb", "DuckDB"],
+  ["mysql", "MySQL"], ["snowflake", "Snowflake"], ["bigquery", "Google BigQuery"],
+];
+
+function SqlTools() {
+  const [source, setSource] = useState("");
+  const [sourceDialect, setSourceDialect] = useState("postgres");
+  const [targetDialect, setTargetDialect] = useState("bigquery");
+  const job = useResult();
+
+  function run(translate) {
+    job.run(() => requestValidation("sql", {
+      source, source_dialect: sourceDialect,
+      target_dialect: translate ? targetDialect : null,
+    }));
+  }
+
+  return <>
+    <div className="validation-controls">
+      <label>Source dialect <select aria-label="Source dialect" value={sourceDialect} onChange={(event) => {
+        setSourceDialect(event.target.value); job.clear();
+      }}>{sqlDialects.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+      <label>Target dialect <select aria-label="Target dialect" value={targetDialect} onChange={(event) => {
+        setTargetDialect(event.target.value); job.clear();
+      }}>{sqlDialects.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select></label>
+    </div>
+    <div className="validation-comparison">
+      <div className="validation-comparison-pane">
+        <Source value={source} onChange={(text) => { setSource(text); job.clear(); }} />
+        <div className="validation-controls">
+          <button className="secondary-button" type="button" disabled={job.pending} onClick={() => run(false)}>Format SQL</button>
+          <button className="secondary-button" type="button" disabled={job.pending} onClick={() => run(true)}>Translate SQL</button>
+        </div>
+      </div>
+      {job.result?.formatted != null && <Output value={job.result.formatted} label="SQL output" extension="sql" />}
+    </div>
+    <Diagnostic diagnostic={job.result?.diagnostic} source={source} />
+    {job.result?.warnings?.length > 0 && <ul className="validation-findings" aria-label="SQL translation warnings">
+      {job.result.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+    </ul>}
+  </>;
+}
+
+function SchemaTools({ xml = false }) {
+  const kind = xml ? "XML" : "JSON";
+  const [source, setSource] = useState("");
+  const [schema, setSchema] = useState("");
+  const job = useResult();
+  return <>
+    <div className="validation-comparison">
+      <div className="validation-comparison-pane">
+        <Source value={source} onChange={(text) => { setSource(text); job.clear(); }} />
+      </div>
+      <div className="validation-comparison-pane">
+        <Source value={schema} onChange={(text) => { setSchema(text); job.clear(); }}
+          label={xml ? "XML Schema (XSD 1.0)" : "JSON Schema (Draft 2020-12)"}
+          fileLabel={xml ? "Open XSD file" : "Open JSON Schema file"} />
+      </div>
+    </div>
+    <div className="validation-controls">
+      <button className="secondary-button" type="button" disabled={job.pending} onClick={() => {
+        job.run(() => requestValidation(xml ? "xml-schema" : "schema", { source, schema_source: schema }));
+      }}>Check against schema</button>
+      {job.result?.valid && <span role="status">{kind} satisfies the schema.</span>}
+    </div>
+    <Diagnostic diagnostic={job.result?.diagnostic} />
+    {job.result?.issues?.length > 0 && <ul className="validation-findings">
+      {job.result.issues.map((issue, index) => <li key={index}>
+        <strong>{issue.document === "schema" ? "Schema" : kind}</strong>{" "}<code>{issue.path}</code>
+        <Diagnostic diagnostic={issue} source={issue.document === "schema" ? schema : source} />
+      </li>)}
+    </ul>}
+    {job.result?.truncated && <p role="status">Only the first 50 issues are shown.</p>}
+  </>;
+}
+
+function ConfigDiff() {
+  const [left, setLeft] = useState("");
+  const [right, setRight] = useState("");
+  const [format, setFormat] = useState("json");
+  const [changesOnly, setChangesOnly] = useState(false);
+  const job = useResult();
+  const result = job.result;
+
+  return <>
+    <label>Format <select aria-label="Config format" value={format} onChange={(event) => {
+      setFormat(event.target.value); job.clear();
+    }}><option value="json">JSON</option><option value="yaml">YAML</option></select></label>
+    <div className="validation-comparison">
+      <div className="validation-comparison-pane">
+        <Source label="Before" fileLabel="Open before file" value={left}
+          onChange={(value) => { setLeft(value); job.clear(); }} />
+      </div>
+      <div className="validation-comparison-pane">
+        <Source label="After" fileLabel="Open after file" value={right}
+          onChange={(value) => { setRight(value); job.clear(); }} />
+      </div>
+    </div>
+    <div className="validation-controls">
+      <button className="secondary-button" type="button" disabled={job.pending} onClick={() => {
+        job.run(() => requestValidation("config-diff", { format, left, right }));
+      }}>Compare configs</button>
+      {result && !result.diagnostic && <label><input type="checkbox" checked={changesOnly}
+        onChange={(event) => setChangesOnly(event.target.checked)} /> Hide unchanged lines</label>}
+    </div>
+    {result?.side && <strong>{result.side === "left" ? "Before" : "After"}</strong>}
+    <Diagnostic diagnostic={result?.diagnostic} source={result?.side === "left" ? left : right} />
+    {result && !result.diagnostic && <>
+      <p role="status">{result.changed ? `${result.changed} changed line(s).` : "No differences after formatting."}</p>
+      <div className="config-diff-scroll">
+        <table className="config-diff">
+          <caption>Formatted comparison</caption>
+          <thead><tr><th scope="col">Before</th><th scope="col">After</th></tr></thead>
+          <tbody>{result.rows.map((row, index) => changesOnly && row.kind === "equal" ? null : <tr key={index} className={`diff-${row.kind}`}>
+            <td><span>{row.left_line}</span><code>{row.kind === "replace" || row.kind === "delete" ? "− " : "  "}{row.left}</code></td>
+            <td><span>{row.right_line}</span><code>{row.kind === "replace" || row.kind === "insert" ? "+ " : "  "}{row.right}</code></td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </>}
+  </>;
+}
+
 export function ValidationApp() {
   const [tool, setTool] = useState("document");
   return <section className="validation api-panel">
@@ -297,5 +425,9 @@ export function ValidationApp() {
     <div className="validation-tool" hidden={tool !== "document"}><Documents /></div>
     <div className="validation-tool" hidden={tool !== "characters"}><Characters /></div>
     <div className="validation-tool" hidden={tool !== "regex"}><RegexPlayground /></div>
+    <div className="validation-tool" hidden={tool !== "sql"}><SqlTools /></div>
+    <div className="validation-tool" hidden={tool !== "schema"}><SchemaTools /></div>
+    <div className="validation-tool" hidden={tool !== "xml-schema"}><SchemaTools xml /></div>
+    <div className="validation-tool" hidden={tool !== "config-diff"}><ConfigDiff /></div>
   </section>;
 }

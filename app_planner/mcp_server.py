@@ -11,6 +11,7 @@ from pydantic import Field
 
 from app_graph.database import load_workspace
 from app_graph.models import Node, Relationship
+from app_planner.search import SearchHit, search
 from app_planner.models import PlannerEntry
 from app_planner.services import assign_project_card_to_priority, get_planner_entry
 from app_projmgmt.models import Project, ProjectCard, ProjectCardCreate
@@ -20,16 +21,25 @@ from app_projmgmt.services import (
     list_project_cards,
 )
 from app_validation.characters import scan_characters
+from app_validation.config_diff import compare_configs
 from app_validation.documents import process_document
 from app_validation.models import (
     CharacterRequest,
     CharacterResult,
+    ConfigDiffRequest,
+    ConfigDiffResult,
     DocumentRequest,
     DocumentResult,
+    SchemaRequest,
+    SchemaResult,
     RegexRequest,
     RegexResult,
+    SqlRequest,
+    SqlResult,
 )
 from app_validation.regex import run_python_regex
+from app_validation.schema import validate_schema, validate_xml_schema
+from app_validation.sql import translate_sql
 from app_viewer.preview import Preview, PreviewRequest, preview_document
 
 
@@ -135,6 +145,38 @@ def inspect_invisible_characters(request: CharacterRequest) -> CharacterResult:
 def find_python_regex_matches(request: RegexRequest) -> RegexResult:
     """Match a Python regex with a timeout, returning code-point spans and captures."""
     return run_python_regex(request)
+
+
+@server.tool(annotations=READ_ONLY)
+def translate_sql_text(request: SqlRequest) -> SqlResult:
+    """Format or translate SQL between dialects without executing it."""
+    return translate_sql(request)
+
+
+@server.tool(annotations=READ_ONLY)
+def check_json_schema(request: SchemaRequest) -> SchemaResult:
+    """Check JSON against an inline Draft 2020-12 schema and return issue paths."""
+    return validate_schema(request)
+
+
+@server.tool(annotations=READ_ONLY)
+def check_xml_schema(request: SchemaRequest) -> SchemaResult:
+    """Check an XML document against a self-contained XSD 1.0 schema."""
+    return validate_xml_schema(request)
+
+
+@server.tool(annotations=READ_ONLY)
+def search_suite(
+    query: Annotated[str, Field(min_length=2, max_length=100)],
+) -> list[SearchHit]:
+    """Find Planner entries, project cards, and hosted Graph notes."""
+    return search(query)
+
+
+@server.tool(annotations=READ_ONLY)
+def compare_config_text(request: ConfigDiffRequest) -> ConfigDiffResult:
+    """Format and compare JSON or YAML configurations."""
+    return compare_configs(request)
 
 
 def create_project_card(card: ProjectCardCreate) -> ProjectCard:

@@ -62,3 +62,55 @@ class RegexResult(BaseModel):
     group_names: dict[str, int] = Field(default_factory=dict)
     truncated: bool = False
     diagnostic: Diagnostic | None = None
+
+
+SqlDialect = Literal["postgres", "sqlite", "duckdb", "mysql", "snowflake", "bigquery"]
+
+
+class SqlRequest(BaseModel):
+    source: Source
+    source_dialect: SqlDialect
+    target_dialect: SqlDialect | None = None
+
+
+class SqlResult(BaseModel):
+    formatted: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    diagnostic: Diagnostic | None = None
+
+
+class SchemaRequest(BaseModel):
+    source: Source
+    schema_source: Source
+
+
+class SchemaIssue(Diagnostic):
+    document: Literal["json", "xml", "schema"]
+    path: str = "$"
+
+
+class SchemaResult(BaseModel):
+    valid: bool
+    issues: list[SchemaIssue] = Field(default_factory=list)
+    truncated: bool = False
+
+
+class ConfigDiffRequest(BaseModel):
+    format: Literal["json", "yaml"]
+    left: Source
+    right: Source
+
+
+class DiffRow(BaseModel):
+    kind: Literal["equal", "insert", "delete", "replace"]
+    left: str | None
+    right: str | None
+    left_line: int | None
+    right_line: int | None
+
+
+class ConfigDiffResult(BaseModel):
+    rows: list[DiffRow] = Field(default_factory=list)
+    changed: int = 0
+    side: Literal["left", "right"] | None = None
+    diagnostic: Diagnostic | None = None

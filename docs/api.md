@@ -6,6 +6,7 @@ table highlights common endpoints. The schema lists the full interface.
 
 | Method | Path | Description |
 | --- | --- | --- |
+| `GET` | `/api/search?q=term` | Search Planner, Projects, and hosted Graph |
 | `GET` | `/api/planner/entries/{entry_date}` | Load a planner entry by `YYYY-MM-DD` date |
 | `PUT` | `/api/planner/entries/{entry_date}` | Save a planner entry for that date |
 | `PUT` | `/api/planner/card-assignments/{card_id}` | Assign or move a card into a dated planner priority slot |
@@ -17,6 +18,10 @@ table highlights common endpoints. The schema lists the full interface.
 | `POST` | `/api/validation/document` | Check document syntax and optionally return formatted text |
 | `POST` | `/api/validation/characters` | Find invisible characters and optionally remove selected offsets |
 | `POST` | `/api/validation/regex` | Return matches and capture spans using Python regex |
+| `POST` | `/api/validation/sql` | Format or translate SQL, including Snowflake and BigQuery |
+| `POST` | `/api/validation/schema` | Check JSON against Draft 2020-12 and report issue paths |
+| `POST` | `/api/validation/xml-schema` | Check XML against a self-contained XSD 1.0 schema |
+| `POST` | `/api/validation/config-diff` | Format and compare JSON or YAML |
 | `GET` | `/api/projmgmt/projects` | List projects |
 | `POST` | `/api/projmgmt/projects` | Create a project |
 | `DELETE` | `/api/projmgmt/projects/{project_id}` | Delete a project and its cards |

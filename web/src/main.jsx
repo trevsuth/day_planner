@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle } from "lucide-react";
+import { CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle, Search } from "lucide-react";
 import { ApiReference } from "./api-reference/ApiReference";
 import { PlannerApp } from "./planner/PlannerApp";
 import { ProjectsApp } from "./projects/ProjectsApp";
+import { SearchApp } from "./search/SearchApp";
 import { ShortcutReference } from "./shortcuts/ShortcutReference";
 import { ValidationApp } from "./validation/ValidationApp";
 import "./styles.css";
@@ -14,22 +15,25 @@ const views = [
   { id: "graph", href: "/graph/", label: "Graph", Icon: GitBranch, separatePage: true },
   { id: "viewer", href: "/viewer/", label: "Viewer", Icon: FileText, separatePage: true },
   { id: "validation", href: "/?view=validation", label: "Validation", Icon: ClipboardCheck },
+  { id: "search", href: "/?view=search", label: "Search", Icon: Search },
   { id: "api", href: "/?view=api", label: "API", Icon: ClipboardList },
 ];
 
 function viewFromLocation() {
   const view = new URLSearchParams(window.location.search).get("view");
-  return ["projects", "validation", "api"].includes(view) ? view : "planner";
+  return ["projects", "validation", "search", "api"].includes(view) ? view : "planner";
 }
 
 function App() {
   const [activeTab, setActiveTab] = useState(viewFromLocation);
-  const [requestedCardId, setRequestedCardId] = useState("");
+  const [requestedCardId, setRequestedCardId] = useState(() => new URLSearchParams(location.search).get("card") || "");
+  const [searchFocus, setSearchFocus] = useState(0);
   const [isShortcutReferenceOpen, setIsShortcutReferenceOpen] = useState(() => new URLSearchParams(window.location.search).get("shortcuts") === "1");
 
   useEffect(() => {
     function restoreView() {
       setActiveTab(viewFromLocation());
+      setRequestedCardId(new URLSearchParams(location.search).get("card") || "");
     }
     window.addEventListener("popstate", restoreView);
     return () => window.removeEventListener("popstate", restoreView);
@@ -43,6 +47,12 @@ function App() {
 
   useEffect(() => {
     function onKeyDown(event) {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.code === "KeyK") {
+        event.preventDefault();
+        openView("search");
+        setSearchFocus((current) => current + 1);
+        return;
+      }
       const target = event.target;
       const isTyping =
         target instanceof HTMLInputElement ||
@@ -63,7 +73,7 @@ function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isShortcutReferenceOpen]);
+  }, [activeTab, isShortcutReferenceOpen]);
 
   return (
     <main className="app-shell">
@@ -110,6 +120,7 @@ function App() {
         />
       ) : null}
       {activeTab === "validation" ? <ValidationApp /> : null}
+      {activeTab === "search" ? <SearchApp focusRequest={searchFocus} /> : null}
       {activeTab === "api" ? <ApiReference /> : null}
       {isShortcutReferenceOpen ? <ShortcutReference onClose={() => setIsShortcutReferenceOpen(false)} /> : null}
     </main>

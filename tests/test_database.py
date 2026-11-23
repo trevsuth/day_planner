@@ -61,10 +61,10 @@ def test_migration_records_planner_migration(temp_db):
             ).fetchall()
         }
 
-    assert migrations == [{"version": "001_baseline"}]
-    assert {"entry_date", "priorities", "priority_card_ids", "tasks"}.issubset(
-        columns
-    )
+    assert {"001_baseline", "002_card_graph_link"} <= {
+        row["version"] for row in migrations
+    }
+    assert {"entry_date", "priorities", "priority_card_ids", "tasks"}.issubset(columns)
 
 
 def test_assigning_card_priority_moves_and_unlinks_card(temp_db):

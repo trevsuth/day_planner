@@ -58,6 +58,7 @@ export function enablePreviewNavigation(viewport, content, mode) {
 
   viewport.addEventListener("pointerdown", (event) => {
     if (event.button !== 0 || !event.isPrimary || !viewport.classList.contains("pan-enabled")) return;
+    if (event.target.closest(".diagram-export")) return;
 
     event.preventDefault();
     viewport.focus({ preventScroll: true });

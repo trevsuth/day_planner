@@ -102,6 +102,8 @@ def update_existing_card(card_id: str, data: ProjectCardUpdate) -> ProjectCard:
     existing.parent_id = data.parent_id
     existing.dependency_ids = data.dependency_ids
     existing.deliverables = data.deliverables
+    if "graph_node_id" in data.model_fields_set:
+        existing.graph_node_id = data.graph_node_id
     return database.update_cards([existing, *descendants])[0]
 
 

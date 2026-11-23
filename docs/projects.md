@@ -25,6 +25,20 @@ The Cards CSV panel exports the active project's cards, downloads a blank import
 
 Project hierarchy, dependency, and schedule-warning rules are implemented server-side in the project management service layer. The web UI keeps matching local domain helpers for responsive rendering, and the API exposes project issue results for clients that need the server as the source of truth.
 
+## Graph runbooks and templates
+
+In the card editor, select **Choose a Graph note** and choose a note from the
+hosted Graph workspace. Save the card to keep the link. **Open Graph runbook**
+opens the selected note in another tab from the editor or card preview.
+If a note is removed from Graph, you can clear or replace its link in
+the card editor. Planner and Projects JSON backups retain the link ID.
+A full PostgreSQL backup also includes the linked Graph data.
+
+When creating a card, choose **Service upgrade**, **Restore rehearsal**, or
+**Incident follow-up**, then select **Apply template**. A template fills
+blank title and description fields and adds its deliverables to the draft.
+Review the draft and save the card when it is ready.
+
 ## Terminal controls
 
 | Key | Action |

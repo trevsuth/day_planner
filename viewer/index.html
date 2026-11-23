@@ -14,6 +14,7 @@
         <a href="/graph/"><span data-icon="graph" aria-hidden="true"></span>Graph</a>
         <a href="/viewer/" aria-current="page"><span data-icon="viewer" aria-hidden="true"></span>Viewer</a>
         <a href="/?view=validation"><span data-icon="validation" aria-hidden="true"></span>Validation</a>
+        <a href="/?view=search"><span data-icon="search" aria-hidden="true"></span>Search</a>
         <a href="/?view=api"><span data-icon="api" aria-hidden="true"></span>API</a>
         <a class="shortcut-help-button" href="/?shortcuts=1" target="_blank" rel="noopener" aria-label="Keyboard shortcuts"><span data-icon="shortcuts" aria-hidden="true"></span>Shortcuts</a>
       </nav>
@@ -32,12 +33,15 @@
             <label class="mode-label" for="diagram-type">Diagram type</label>
             <select id="diagram-type"></select>
           </div>
+          <button type="button" class="preview-size preview-fit" id="export-html" disabled>Download HTML</button>
+          <button type="button" class="preview-size preview-fit" id="print-preview" disabled>Print preview</button>
           <label class="file-control">
             <span data-icon="file" aria-hidden="true"></span>Open file
             <input id="file" type="file" accept=".md,.markdown,.mmd,.mermaid,.txt,text/plain">
           </label>
         </div>
       </header>
+      <p id="document-export-status" role="status" hidden></p>
       <p id="file-error" role="alert" hidden></p>
       <div class="workspace" id="viewer-workspace">
         <section class="pane editor" id="source-pane" aria-label="Editor">
@@ -62,6 +66,7 @@
                 <span data-icon="hand" aria-hidden="true"></span>
               </button>
             </div>
+            <div id="standalone-export"></div>
             <button id="preview-size" class="preview-size" type="button" aria-label="Expand preview" title="Expand preview" aria-controls="viewer-workspace">
               <span data-icon="expand" aria-hidden="true"></span>
             </button>

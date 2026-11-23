@@ -1,6 +1,7 @@
 import { HelpCircle, X } from "lucide-react";
 
 const shortcutSections = [
+  { title: "Suite navigation", rows: [["Search Planner, Projects, and Graph", "Ctrl+Shift+K / Cmd+Shift+K"]] },
   {
     title: "Web Planner",
     rows: [

@@ -414,4 +414,6 @@ def test_migration_creates_project_schema(temp_db):
     assert columns["start_date"] == "date"
     assert columns["dependency_ids"] == "jsonb"
     assert columns["deliverables"] == "jsonb"
-    assert migrations == [{"version": "001_baseline"}]
+    assert {"001_baseline", "002_card_graph_link"} <= {
+        row["version"] for row in migrations
+    }

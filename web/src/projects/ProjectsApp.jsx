@@ -16,6 +16,7 @@ import {
   Upload,
 } from "lucide-react";
 import { request } from "../api/client";
+import { cardTemplates } from "./cardTemplates";
 import {
   activityFieldLabels,
   CARD_TYPES,
@@ -735,6 +736,7 @@ export function ProjectsApp({ onRequestedCardOpened, requestedCardId }) {
       parent_id: selectedCard.parent_id || null,
       dependency_ids: selectedCard.dependency_ids || [],
       deliverables: selectedCard.deliverables.map((item) => item.trim()).filter(Boolean),
+      graph_node_id: selectedCard.graph_node_id || null,
     };
 
     try {
@@ -2335,6 +2337,8 @@ function CardPreviewPanel({ card, cards, onClose, onEdit, onMoveCard, onOpenCard
         </IconButton>
       </header>
 
+      {card.graph_node_id && <a className="secondary-button" href={runbookUrl(card.graph_node_id)} target="_blank" rel="noopener">Open Graph runbook</a>}
+
       <div className="preview-meta-grid">
         <div>
           <span>Status</span>
@@ -2571,6 +2575,46 @@ function ProjectEditor({ cards, onCancel, onChange, onCreateEpic, onDelete, onOp
   );
 }
 
+function runbookUrl(id) {
+  return `/graph/?node=${encodeURIComponent(id)}`;
+}
+
+function RunbookPicker({ value, onChange }) {
+  const [nodes, setNodes] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function loadNodes() {
+    setLoading(true);
+    setError("");
+    try {
+      const workspace = await request("/api/graphs/workspace");
+      setNodes((workspace?.document?.nodes || []).slice().sort((left, right) => left.title.localeCompare(right.title)));
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return <section className="dependencies-editor">
+    <h3>Graph runbook</h3>
+    {value && <a className="secondary-button" href={runbookUrl(value)} target="_blank" rel="noopener">Open Graph runbook</a>}
+    {nodes === null && <button type="button" className="secondary-button" disabled={loading} onClick={loadNodes}>
+      {loading ? "Loading Graph…" : "Choose a Graph note"}
+    </button>}
+    {nodes !== null && <label>
+      Linked Graph note
+      <select aria-label="Linked Graph note" value={value || ""} onChange={(event) => onChange(event.target.value || null)}>
+        <option value="">No linked note</option>
+        {value && !nodes.some((node) => node.id === value) && <option value={value}>Unavailable Graph note</option>}
+        {nodes.map((node) => <option value={node.id} key={node.id}>{node.title}</option>)}
+      </select>
+    </label>}
+    {error && <p role="alert">{error}</p>}
+  </section>;
+}
+
 function CardEditor({
   activity,
   card,
@@ -2590,6 +2634,7 @@ function CardEditor({
   const [plannerAssignStatus, setPlannerAssignStatus] = useState("");
   const [isAssigningPlanner, setIsAssigningPlanner] = useState(false);
   const [isDependenciesOpen, setIsDependenciesOpen] = useState(false);
+  const [templateId, setTemplateId] = useState("");
   const expectedParentType = parentTypeByCardType[card.card_type];
   const childType = childTypeByCardType[card.card_type];
   const parentCard = cards.find((candidate) => candidate.id === card.parent_id);
@@ -2702,6 +2747,24 @@ function CardEditor({
             </button>
           </div>
         </header>
+
+        {!card.id && <div className="validation-controls">
+          <label>Card template
+            <select aria-label="Card template" value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
+              <option value="">Select a template</option>
+              {cardTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
+            </select>
+          </label>
+          <button type="button" className="secondary-button" disabled={!templateId} onClick={() => {
+            const template = cardTemplates.find((item) => item.id === templateId);
+            onChange({
+              ...card,
+              title: card.title.trim() ? card.title : template.label,
+              description: card.description?.trim() ? card.description : template.description,
+              deliverables: [...new Set([...card.deliverables.filter((item) => item.trim()), ...template.deliverables])],
+            });
+          }}>Apply template</button>
+        </div>}
 
         <label>
           <span>Title</span>
@@ -2929,6 +2992,8 @@ function CardEditor({
           </label>
           <MarkdownPreview value={card.comments || ""} />
         </section>
+
+        <RunbookPicker value={card.graph_node_id} onChange={(value) => updateField("graph_node_id", value)} />
 
         <section className="deliverables-editor">
           <header>

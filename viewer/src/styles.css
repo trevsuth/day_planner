@@ -336,6 +336,23 @@ textarea::placeholder { color: var(--muted); }
   border: 1px solid rgb(91 210 234 / 0.24);
   background: var(--bg-2);
 }
+.diagram-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diagram .diagram-export { margin-top: 0.75rem; }
+#standalone-export:empty { display: none; }
+
+.diagram-export .preview-size {
+  width: auto;
+  padding-inline: 8px;
+  font: inherit;
+  font-size: 0.76rem;
+}
+
 .diagram-error, #file-error { color: var(--danger); white-space: pre-wrap; }
 
 @media (max-width: 760px) {
@@ -348,4 +365,39 @@ textarea::placeholder { color: var(--muted); }
   .topbar h1 { font-size: 1.7rem; }
   .app-tabs { width: 100%; }
   .app-tabs a { flex: 1; justify-content: center; }
+}
+
+@media print {
+  html, body { background: white !important; color: #111 !important; }
+  .app-shell, .workspace, .workspace > .pane {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    clip-path: none !important;
+    background: white !important;
+  }
+  .app-tabs, .topbar, #source-pane, .pane-header, .diagram-export,
+  #file-error, #document-export-status { display: none !important; }
+  #preview-viewport, #preview {
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: white !important;
+    color: #111 !important;
+    zoom: 1 !important;
+  }
+  .preview :is(a, h1, h2, h3, h4, blockquote, code, pre) { color: #111 !important; }
+  .preview :is(pre, code) { background: #edf2f4 !important; }
+  .diagram { break-inside: avoid; }
+  .diagram img {
+    background: #0b141a;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
