@@ -235,3 +235,54 @@ test("capture Viewer screenshot", async ({ page }) => {
   await page.waitForFunction(() => document.querySelector(".diagram img")?.naturalWidth > 0);
   await page.screenshot({ path: path.join(screenshotDirectory, "viewer.png"), fullPage: true });
 });
+
+test("capture Validation and API screenshots", async ({ page }) => {
+  await fs.mkdir(screenshotDirectory, { recursive: true });
+  await page.setViewportSize({ width: 1440, height: 960 });
+  const capture = (name) => page.screenshot({
+    path: path.join(screenshotDirectory, `${name}.png`),
+    fullPage: true,
+    animations: "disabled",
+  });
+
+  await page.goto("/?view=validation");
+  const tool = page.locator(".validation-tool:visible");
+  const source = tool.getByLabel("Source text");
+  await source.fill('{"project": "Orbital Launch",\n "checks": ["weather", "telemetry",],\n "ready": true}');
+  await tool.getByRole("button", { name: "Validate", exact: true }).click();
+  await expect(tool.getByRole("alert")).toContainText("Line 2");
+  await capture("validation-syntax");
+
+  await tool.getByLabel("Format", { exact: true }).selectOption("yaml");
+  await source.fill('project:   "Orbital Launch" # Ops review\nchecks:\n- weather\n- telemetry\nready:   true');
+  await tool.getByRole("button", { name: "Format document" }).click();
+  await expect(tool.getByLabel("Formatted output")).toHaveValue(/ready: true/);
+  await source.blur();
+  await capture("validation-format");
+
+  await page.getByRole("button", { name: "Invisible Characters", exact: true }).click();
+  await source.fill("Launch\u200b checklist\nWeather\u00a0brief\nStatus: ready");
+  await tool.getByRole("button", { name: "Show invisible characters" }).click();
+  await tool.getByRole("checkbox", { name: /U\+200B/ }).check();
+  await tool.getByRole("button", { name: "Preview removal" }).click();
+  await expect(tool.getByLabel("Cleaned preview")).toHaveValue("Launch checklist\nWeather\u00a0brief\nStatus: ready");
+  await tool.getByText("Show markers in source", { exact: true }).click();
+  await capture("validation-invisible");
+
+  await page.getByRole("button", { name: "Regex Playground", exact: true }).click();
+  await tool.getByLabel("Pattern").fill(String.raw`^(?P<time>\d{2}:\d{2})\s+(?P<status>READY|HOLD):`);
+  await tool.getByLabel("Flags").fill("m");
+  await source.fill("09:00 READY: telemetry online\n09:15 HOLD: weather review\noperator note: next update at 09:30\n09:30 READY: checks complete");
+  await tool.getByRole("button", { name: "Find matches" }).click();
+  await expect(tool.locator("mark")).toHaveCount(3);
+  await tool.getByText("Match positions and capture groups", { exact: true }).click();
+  await capture("validation-regex");
+
+  await page.goto("/?view=api");
+  const reference = page.locator(".api-reference-grid");
+  await expect(reference.getByRole("heading", { name: "Validation", exact: true })).toBeVisible();
+  await reference.screenshot({
+    path: path.join(screenshotDirectory, "api-reference.png"),
+    animations: "disabled",
+  });
+});

@@ -1,6 +1,6 @@
 # Daily Planner
 
-A daily planner, project workspace, visual wiki, and Markdown and Mermaid viewer. The web app brings together Planner, Projects, Graph, and Viewer. The Python [Textual](https://textual.textualize.io/) TUI provides access to Planner and Projects. The planner is inspired by the Sidekick layout and gives each day a schedule, priorities, tasks, and notes.
+A daily planner, project workspace, visual wiki, document viewer, and validation toolkit. The shared web navigation includes Planner, Projects, Graph, Viewer, Validation, API, and Shortcuts. The Python [Textual](https://textual.textualize.io/) TUI provides access to Planner and Projects. The planner is inspired by the Sidekick layout and gives each day a schedule, priorities, tasks, and notes.
 
 ## Features
 
@@ -18,7 +18,8 @@ A daily planner, project workspace, visual wiki, and Markdown and Mermaid viewer
 - Planner assignment warnings for full future days and already scheduled card priorities
 - Card comments with Markdown preview and Mermaid/MMD fenced block support
 - Project deletion from the Projects sidebar
-- FastAPI JSON API for web access
+- JSON, XML, YAML, and TOML validation and formatting, invisible-character inspection and cleanup, and a Python and JavaScript regex playground
+- FastAPI endpoints and MCP tools for programmatic and LLM clients
 - Docker Compose hosting with a persisted Postgres database
 - Optional standalone executable build with PyInstaller
 
@@ -66,6 +67,26 @@ The viewer renders in the browser and does not upload or save your source.
 Raw HTML and external images are disabled in the preview. Keep your source in
 a local file if you want to use it again.
 
+## Validation
+
+Open **Validation** from the shared navigation or go to `/?view=validation`.
+Each tool accepts pasted text or a UTF-8 file and keeps its draft while you
+switch between tools.
+
+- **Validate & Format** checks JSON, XML, YAML, and TOML. Syntax errors show
+  a line, column, and source excerpt when available. Preview formatted output,
+  then copy or download it. YAML and TOML formatting preserves comments.
+- **Invisible Characters** marks suspicious characters and shows their Unicode
+  code points and positions. Select individual findings to preview removal
+  while keeping the original text available.
+- **Regex Playground** defaults to Python and offers JavaScript in the
+  dialect selector. It highlights matches and shows positions and capture
+  groups. Both engines stop after one second.
+
+Your Day Planner API processes document checks, character inspection, and
+Python regex in memory. JavaScript regex runs in the browser. See the
+[Validation guide](docs/validation.md) for limits and request shapes.
+
 ## Screenshots
 
 ![Planner day view](docs/screenshots/planner.png)
@@ -83,6 +104,16 @@ a local file if you want to use it again.
 ![Graph wiki showing the selected launch plan with a Markdown preview](docs/screenshots/graph-wiki.png)
 
 ![Viewer opening in Mermaid mode with an editable example and a rendered flowchart](docs/screenshots/viewer.png)
+
+![Validation showing a JSON syntax error with its line, column, and caret](docs/screenshots/validation-syntax.png)
+
+![Validation formatting a YAML document while preserving its comment](docs/screenshots/validation-format.png)
+
+![Validation marking invisible characters and previewing selective removal](docs/screenshots/validation-invisible.png)
+
+![Python regex playground highlighting matches and showing named capture groups](docs/screenshots/validation-regex.png)
+
+![API Reference showing the Graph, Viewer, and Validation endpoints](docs/screenshots/api-reference.png)
 
 ## Quickstart
 
@@ -266,10 +297,22 @@ Continuous integration runs the same core checks on pushes to `main` and pull re
 
 ## APIs and MCP
 
-Open the suite's API Reference for Planner, Projects, Graph, and Viewer
-endpoints. The [Validation tool](docs/validation.md) also exposes document,
-character, and Python regex operations over HTTP and MCP. See the [MCP guide](docs/mcp.md) for local clients and ChatGPT
-connection options.
+Open **API** from the shared navigation for the Planner, Projects, Graph,
+Viewer, and Validation endpoints. Interactive OpenAPI documentation is at
+`/docs`, and the machine-readable schema is at `/openapi.json`.
+
+The MCP server exposes Planner days, Projects cards, Graph notes and
+relationships, Viewer previews, and the Validation tools. It supports local
+stdio and Streamable HTTP on loopback. Tools are read-only by default.
+Set `DAY_PLANNER_MCP_WRITES=1` to enable project card creation and assignment
+to Planner priorities.
+
+```bash
+uv run --locked --no-default-groups -m app_planner.mcp_server --http-port 8765
+```
+
+For client configuration and ChatGPT connection options, see the
+[MCP guide](docs/mcp.md).
 
 ## Backup And Restore
 
@@ -305,7 +348,7 @@ covers all three tools and hosted attachment bytes.
 
 ## API
 
-The web frontend talks to the FastAPI app through these endpoints:
+These FastAPI endpoints are available to web and programmatic clients.
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -316,6 +359,10 @@ The web frontend talks to the FastAPI app through these endpoints:
 | `GET` | `/api/graphs/workspace` | Load the shared graph and its current revision |
 | `PUT` | `/api/graphs/workspace` | Save a graph and any new files using the current revision |
 | `GET` | `/api/graphs/workspace/attachments/{key}` | Download a stored attachment |
+| `POST` | `/api/viewer/preview` | Prepare Markdown HTML and extract Mermaid diagram source |
+| `POST` | `/api/validation/document` | Check document syntax and optionally return formatted text |
+| `POST` | `/api/validation/characters` | Find invisible characters and optionally remove selected offsets |
+| `POST` | `/api/validation/regex` | Return matches and capture spans using Python regex |
 | `GET` | `/api/projmgmt/projects` | List projects |
 | `POST` | `/api/projmgmt/projects` | Create a project |
 | `DELETE` | `/api/projmgmt/projects/{project_id}` | Delete a project and its cards |
@@ -350,7 +397,7 @@ Project hierarchy, dependency, and schedule-warning rules are implemented server
 | Service | Routes | Responsibility |
 | --- | --- | --- |
 | `daily-planner` | `/`, `/?view=projects`, `/graph/`, `/viewer/` | Nginx serves the hosted static frontends |
-| `daily-planner-api` | `/api/`, `/docs`, `/openapi.json` | Unified FastAPI service for Planner, Projects, and Graph |
+| `daily-planner-api` | `/api/`, `/docs`, `/openapi.json` | FastAPI service for Planner, Projects, Graph, Viewer previews, and Validation |
 | `postgres` | — | Stores Planner, Projects, Graph, and Graph attachment data |
 
 Nginx proxies the API in Compose. K3s Ingress routes `/api/` to FastAPI directly.
@@ -523,21 +570,25 @@ Available `just` recipes:
 app_planner/
   api.py       Unified FastAPI app and static frontend serving
   routes.py    Planner API routes and compatibility URLs
-  database.py  Postgres setup and persistence helpers
+  mcp_server.py Shared suite tools over MCP
+  database.py  Planner persistence helpers
   models.py    Pydantic models for planner entries and tasks
   ui.css       Textual styles
   ui.py        Textual application and keyboard handling
 app_projmgmt/
   api.py       Project management API routes
-  database.py  Postgres setup and persistence helpers for projects and cards
+  database.py  Persistence helpers for projects and cards
   models.py    Pydantic models for projects, cards, statuses, and card types
 app_graph/     Graph API, revision checks, and Postgres storage
+app_viewer/    Stateless document preview API
+app_validation/ Document, character, and Python regex tools
 tests/
   test_database.py
   test_projmgmt_database.py
 web/
   src/planner/  React planner view
   src/projects/ React project management view
+  src/validation/ Validation workspace
 viewer/         Markdown and Mermaid viewer
 deploy/k3s/     Web, API, PostgreSQL, Ingress, migration, and backup manifests
 deploy/nginx/  Web shell proxy and static server configuration
