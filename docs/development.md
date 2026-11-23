@@ -42,9 +42,10 @@ npm --prefix web run dev -- --host 127.0.0.1
 ```
 
 Run the terminal app with `just tui` or, after migrations, with
-`uv run --locked python -m app_planner.ui`. The PyInstaller build
-(`just build` or `uv run --locked pyinstaller planner.spec`) includes
-`app_planner/ui.css`. Migrate a fresh database before launching it.
+`uv run --locked python -m app_planner.ui`. To build the standalone
+executable, run `just build` or `uv run --locked pyinstaller deploy/desktop/planner.spec`.
+The [PyInstaller spec](../deploy/desktop/planner.spec) bundles `app_planner/ui.css`.
+Migrate a fresh database before launching the executable.
 
 ## Compose and database settings
 

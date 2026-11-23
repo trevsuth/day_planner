@@ -81,7 +81,8 @@ The [Just recipe guide](docs/just.md) lists commands for local hosting,
 development, tests, screenshots, and recovery. The
 [k3s deployment runbook](deploy/k3s/README.md) covers release images,
 migration checks, TLS, backups, and rollback. See the
-[architecture overview](ARCHITECTURE.md) for how the components fit together.
+[architecture overview](ARCHITECTURE.md) for how the components fit together
+and the [roadmap](docs/roadmap.md) for planned work.
 
 ## Screenshots
 

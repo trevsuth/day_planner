@@ -1,11 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+
+root = Path(SPECPATH).resolve().parents[1]
 
 a = Analysis(
-    ['app_planner/ui.py'],
-    pathex=[],
+    [str(root / 'app_planner/ui.py')],
+    pathex=[str(root)],
     binaries=[],
-    datas=[('app_planner/ui.css', 'app_planner')],
+    datas=[(str(root / 'app_planner/ui.css'), 'app_planner')],
     hiddenimports=['textual', 'textual.app', 'rich', 'rich.console'],
     hookspath=[],
     hooksconfig={},

@@ -255,7 +255,7 @@ lint:
 
 # Build a standalone executable
 build:
-    pyinstaller planner.spec
+    uv run --locked pyinstaller deploy/desktop/planner.spec
 # Clean up build artifacts
 clean:
     rm -rf build dist __pycache__
