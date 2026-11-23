@@ -1,7 +1,8 @@
 # Deploy Day Planner to k3s
 
 One Ingress serves the suite. The `daily-planner` Deployment serves Planner,
-Projects, Graph at `/graph/`, and Viewer at `/viewer/` from one Nginx image.
+Projects, Graph at `/graph/`, Viewer at `/viewer/`, and Validation at
+`/?view=validation` from one Nginx image.
 The Ingress routes `/api/` directly to the `daily-planner-api` Deployment.
 PostgreSQL 17 runs in the `postgres` StatefulSet with its existing data claim.
 A one-shot Job migrates its schema before each application rollout.
@@ -36,7 +37,7 @@ the proxy is the access boundary.
 
 ## Install or upgrade
 
-Use Bash, `just`, `kubectl`, Mike Farah `yq` v4, and curl from the deployment
+Use Bash, `kubectl`, Mike Farah `yq` v4, curl, and optionally `just` from the deployment
 workstation. The cluster needs an ingress controller and default StorageClass.
 Select the intended context with `kubectl config get-contexts`. Set
 `K3S_CONTEXT` to that name and `SUITE_URL` to the configured ingress URL.
@@ -54,6 +55,18 @@ just k3s-preflight "$K3S_CONTEXT"
 just k3s-apply "$K3S_CONTEXT"
 just k3s-smoke "$SUITE_URL"
 ```
+
+From the same checkout, run the deployment scripts directly if you use
+`kubectl` without Just:
+
+```bash
+bash deploy/k3s/setup.sh init-db "$K3S_CONTEXT"
+kubectl kustomize deploy/k3s-overlays/local
+bash deploy/k3s/setup.sh preflight "$K3S_CONTEXT" deploy/k3s-overlays/local
+bash deploy/k3s/setup.sh apply "$K3S_CONTEXT" deploy/k3s-overlays/local
+bash deploy/k3s/smoke.sh "$SUITE_URL"
+```
+
 
 The standalone preflight is a preview. Apply repeats preflight using its own
 render, checks the selected context and required Secret keys, performs a server

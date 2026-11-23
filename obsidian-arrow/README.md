@@ -3,11 +3,39 @@ Local Graph Wiki
 
 A local-first visual graph and wiki application inspired by arrows.app. It runs
 in the browser with React, TypeScript, Vite, and an SVG graph canvas. The
-combined project serves Graph at `/graph/` alongside Planner and Projects.
-See the [root README](../README.md) for Compose and k3s setup.
+combined project serves Graph at `/graph/` inside the Day Planner suite.
+See the [root README](../README.md#quickstart) for Compose and the [k3s guide](../deploy/k3s/README.md) for deployment.
 
-Run it
-------
+## Hosted Graph
+
+Open **Graph** from the web navigation or go directly to `/graph/`. Use it to
+organize notes and reference material as nodes, then draw relationships to show
+how they connect.
+
+- Write node content in Markdown, link to other nodes, and follow backlinks.
+- Attach reference files and find nodes by title, content, label, or tag.
+- Pan and zoom the canvas, use the minimap, and arrange groups of nodes in a grid or circle.
+
+Hosted Graph autosaves one shared graph and its attachments to Postgres. Open
+the same deployment from another browser to pick up where you left off. If a
+stale tab tries to save over a newer revision, Graph asks you to export your
+edits and reload. The standalone version stores data in the browser.
+
+The workspace summary shows node, relationship, and selection counts. Use the
+search and filters above the canvas to find nodes. Open **Document** to rename
+the graph or find the import, export, and backup actions. Use
+**Export backup** to make a portable copy with attachment files and **Import JSON**
+to bring it into a deployment. **Export JSON** carries the graph
+and attachment metadata. Hosted attachments can be up to 10 MiB each, and a
+single save or import request can be up to 24 MiB. See the
+[migration steps](../deploy/k3s/README.md#move-an-existing-graph) for existing graphs.
+
+![Graph canvas with linked launch planning notes](../docs/screenshots/graph-canvas.png)
+
+![Selected Graph node with Markdown preview](../docs/screenshots/graph-wiki.png)
+
+Standalone development
+----------------------
 
 ```bash
 just install

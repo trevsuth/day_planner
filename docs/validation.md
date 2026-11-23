@@ -40,3 +40,13 @@ Unmatched captures are null.
 
 See the suite's API Reference or `/docs` for request and response schemas and
 the [MCP setup guide](mcp.md) for client configuration.
+
+## Screenshots
+
+![Line, column, and caret for a JSON syntax error](screenshots/validation-syntax.png)
+
+![YAML formatted with its comment preserved](screenshots/validation-format.png)
+
+![Marked invisible characters and selective cleanup](screenshots/validation-invisible.png)
+
+![Highlighted Python regex matches with named capture groups](screenshots/validation-regex.png)
