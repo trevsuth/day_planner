@@ -3178,3 +3178,17 @@ textarea {
 .config-diff td span { display: inline-block; min-width: 3ch; color: var(--muted); margin-right: 0.5rem; }
 .config-diff :is(.diff-delete, .diff-replace) td:first-child { background: rgb(151 36 48 / 0.35); }
 .config-diff :is(.diff-insert, .diff-replace) td:last-child { background: rgb(34 115 78 / 0.35); }
+
+.calculator-form { display: grid; justify-items: start; gap: 1rem; }
+.calculator-form .validation-editor { width: 100%; }
+.calculator-results { display: grid; gap: 0.55rem; margin: 0; }
+.calculator-results > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 3fr);
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.calculator-results dt { font-weight: 700; }
+.calculator-results dd { margin: 0; overflow-wrap: anywhere; }
+.calculator-form input[type="checkbox"] { width: auto; }

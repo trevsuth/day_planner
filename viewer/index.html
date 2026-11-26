@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; object-src 'none'; base-uri 'none'">
-    <title>Markdown &amp; Mermaid Viewer</title>
+    <title>Viewer | Day Planner</title>
   </head>
   <body>
     <main class="app-shell">
@@ -14,6 +14,7 @@
         <a href="/graph/"><span data-icon="graph" aria-hidden="true"></span>Graph</a>
         <a href="/viewer/" aria-current="page"><span data-icon="viewer" aria-hidden="true"></span>Viewer</a>
         <a href="/?view=validation"><span data-icon="validation" aria-hidden="true"></span>Validation</a>
+        <a href="/?view=calculator"><span data-icon="calculator" aria-hidden="true"></span>Calculator</a>
         <a href="/?view=search"><span data-icon="search" aria-hidden="true"></span>Search</a>
         <a href="/?view=api"><span data-icon="api" aria-hidden="true"></span>API</a>
         <a class="shortcut-help-button" href="/?shortcuts=1" target="_blank" rel="noopener" aria-label="Keyboard shortcuts"><span data-icon="shortcuts" aria-hidden="true"></span>Shortcuts</a>
@@ -21,13 +22,15 @@
       <header class="topbar">
         <div>
           <div class="eyebrow"><span data-icon="viewer" aria-hidden="true"></span>Viewer</div>
-          <h1>Markdown &amp; Mermaid</h1>
+          <h1>Viewer</h1>
         </div>
         <div class="toolbar-group" role="group" aria-label="Document controls">
           <label class="mode-label" for="mode">Format</label>
           <select id="mode">
             <option value="mermaid" selected>Mermaid</option>
             <option value="markdown">Markdown</option>
+            <option value="qr">QR Code</option>
+            <option value="barcode">Barcode (Code 128)</option>
           </select>
           <div class="diagram-controls" id="diagram-controls">
             <label class="mode-label" for="diagram-type">Diagram type</label>

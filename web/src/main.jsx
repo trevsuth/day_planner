@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle, Search } from "lucide-react";
+import { Calculator, CalendarDays, ClipboardCheck, ClipboardList, FileText, FolderKanban, GitBranch, HelpCircle, Search } from "lucide-react";
+import { CalculatorApp } from "./calculator/CalculatorApp";
 import { ApiReference } from "./api-reference/ApiReference";
 import { PlannerApp } from "./planner/PlannerApp";
 import { ProjectsApp } from "./projects/ProjectsApp";
@@ -15,13 +16,14 @@ const views = [
   { id: "graph", href: "/graph/", label: "Graph", Icon: GitBranch, separatePage: true },
   { id: "viewer", href: "/viewer/", label: "Viewer", Icon: FileText, separatePage: true },
   { id: "validation", href: "/?view=validation", label: "Validation", Icon: ClipboardCheck },
+  { id: "calculator", href: "/?view=calculator", label: "Calculator", Icon: Calculator },
   { id: "search", href: "/?view=search", label: "Search", Icon: Search },
   { id: "api", href: "/?view=api", label: "API", Icon: ClipboardList },
 ];
 
 function viewFromLocation() {
   const view = new URLSearchParams(window.location.search).get("view");
-  return ["projects", "validation", "search", "api"].includes(view) ? view : "planner";
+  return ["projects", "validation", "calculator", "search", "api"].includes(view) ? view : "planner";
 }
 
 function App() {
@@ -120,6 +122,7 @@ function App() {
         />
       ) : null}
       {activeTab === "validation" ? <ValidationApp /> : null}
+      {activeTab === "calculator" ? <CalculatorApp /> : null}
       {activeTab === "search" ? <SearchApp focusRequest={searchFocus} /> : null}
       {activeTab === "api" ? <ApiReference /> : null}
       {isShortcutReferenceOpen ? <ShortcutReference onClose={() => setIsShortcutReferenceOpen(false)} /> : null}

@@ -32,6 +32,27 @@ flowchart LR
 | `app_planner/mcp_server.py` | Optional stdio and loopback HTTP process that calls suite services directly. Tools are read-only by default. |
 | Nginx | Serves all hosted static bundles from one image. Compose also uses it as the same-origin API proxy. Independent frontend builds preserve local development workflows. |
 
+## Module layout
+
+| Module | Python | Browser code | Guide |
+| --- | --- | --- | --- |
+| Planner | `app_planner/` | `web/src/planner/` | [Planner](docs/planner.md) |
+| Projects | `app_projmgmt/` | `web/src/projects/` | [Projects](docs/projects.md) |
+| Graph | `app_graph/` | `obsidian-arrow/src/` | [Graph](obsidian-arrow/README.md) |
+| Viewer | `app_viewer/` | `viewer/src/` | [Viewer](viewer/README.md) |
+| Validation | `app_validation/` | `web/src/validation/` | [Validation](docs/validation.md) |
+| Calculator | — | `web/src/calculator/` | [Calculator](docs/calculator.md) |
+| Suite Search | `app_planner/search.py` | `web/src/search/` | [Search](docs/search.md) |
+
+Use `api.py` for domain HTTP routes, `models.py` for shared request or
+response models, and `database.py` for persistence when the module needs
+it. Give substantial operations descriptive names, such as `preview.py` and
+`config_diff.py`. Planner routes live in `app_planner/routes.py` because
+`app_planner/api.py` is the suite entry point. Browser bundles for Graph and
+Viewer keep their independent build entry points. Calculator uses browser-only functions in
+`web/src/domain/`. Python tests live under
+`tests/` and browser workflows under `web/e2e/`.
+
 ## Storage and changes
 
 PostgreSQL stores Planner entries and their project links, project cards and

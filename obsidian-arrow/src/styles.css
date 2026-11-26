@@ -271,6 +271,8 @@ select option {
   box-shadow: 0 12px 28px var(--shadow);
 }
 
+.document-actions-panel a { text-decoration: none; }
+
 .graph-load-status {
   padding: 1rem 0;
 }

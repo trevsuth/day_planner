@@ -34,6 +34,19 @@ single save or import request can be up to 24 MiB. See the
 
 ![Selected Graph node with Markdown preview](../docs/screenshots/graph-wiki.png)
 
+## User guide graph
+
+Open **Document → Download user guide** or get the
+[Day Planner User Guide JSON](public/user-guide.graph.json) from the repository.
+The guide contains a **Start Here** note with links to the main tools, followed
+by notes on daily workflows, automation, k3s deployment, and recovery.
+
+To explore it in Graph, use **Document → Import JSON**, then choose **Fit** and
+select **Start Here**. Use a fresh browser profile with standalone Graph to
+keep the guide separate from your main workspace. For a hosted workspace
+you plan to replace, use **Document → Export backup** first. Importing
+replaces the current graph.
+
 Standalone development
 ----------------------
 
@@ -109,8 +122,6 @@ Architecture
 - `src/types/graph.ts` defines the stable graph document, node, relationship, and attachment model.
 - `src/lib/graphOps.ts` contains pure graph operations for creating, updating, moving, connecting, and deleting graph entities.
 - `src/lib/storage.ts` owns local save/load plus JSON import/export helpers.
-- `src/lib/sqlite.ts` maps the browser JSON document model to SQLite row snapshots.
-- `src/lib/tauriStorage.ts` defines a Tauri command-backed storage adapter for SQLite documents and filesystem attachments.
 - `src/lib/search.ts` searches node titles, labels, tags, and markdown content.
 - `src/components/GraphCanvas.tsx` renders the SVG graph and handles drag/select interactions.
 - `src/components/InspectorPanel.tsx` edits selected node or relationship metadata.
@@ -119,4 +130,4 @@ Architecture
 Next steps
 ----------
 
-See [todo.md](todo.md) for planned work.
+See the [project roadmap](../docs/roadmap.md) for planned work.

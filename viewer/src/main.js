@@ -5,6 +5,7 @@ import graphIcon from "lucide-static/icons/git-branch.svg?raw";
 import viewerIcon from "lucide-static/icons/file-text.svg?raw";
 import validationIcon from "lucide-static/icons/clipboard-check.svg?raw";
 import shortcutsIcon from "lucide-static/icons/circle-help.svg?raw";
+import calculatorIcon from "lucide-static/icons/calculator.svg?raw";
 import searchIcon from "lucide-static/icons/search.svg?raw";
 import apiIcon from "lucide-static/icons/clipboard-list.svg?raw";
 import fileIcon from "lucide-static/icons/folder-open.svg?raw";
@@ -15,8 +16,8 @@ import restoreIcon from "lucide-static/icons/minimize.svg?raw";
 import zoomInIcon from "lucide-static/icons/zoom-in.svg?raw";
 import zoomOutIcon from "lucide-static/icons/zoom-out.svg?raw";
 import handIcon from "lucide-static/icons/hand.svg?raw";
-import { exportDocument } from "./document-export.js";
-import { diagramExportControls } from "./diagram-export.js";
+import { diagramExportControls, exportDocument } from "./export.js";
+import { codeFormats } from "./codes.js";
 import { diagramExamples } from "./diagram-examples.js";
 import { enablePreviewNavigation } from "./preview-navigation.js";
 import "./styles.css";
@@ -28,6 +29,7 @@ const icons = {
   viewer: viewerIcon,
   validation: validationIcon,
   api: apiIcon,
+  calculator: calculatorIcon,
   search: searchIcon,
   shortcuts: shortcutsIcon,
   file: fileIcon,
@@ -133,35 +135,54 @@ async function renderDiagram(container, version, number) {
     if (version !== renderVersion) return;
     const { svg } = await mermaid.render(`viewer-diagram-${++nextDiagramId}`, container.dataset.diagram);
     if (version !== renderVersion) return;
-    const blob = new Blob([svg], { type: "image/svg+xml" });
-    const url = URL.createObjectURL(blob);
-    imageUrls.push(url);
-    const image = new Image();
-    image.src = url;
-    image.alt = "Mermaid diagram";
-    diagramBlobs.set(image, blob);
-    const controls = diagramExportControls({ image, svg, blob, number });
-    container.replaceChildren(image);
-    if (mode.value === "mermaid") standaloneExport.replaceChildren(controls);
-    else container.append(controls);
+    showGraphic(container, svg, { number, alt: "Mermaid diagram" });
   } catch (error) {
-    if (version !== renderVersion) return;
-    const message = document.createElement("p");
-    message.className = "diagram-error";
-    message.setAttribute("role", "alert");
-    message.textContent = `Could not render diagram. ${error.message ?? String(error)}`;
-    container.replaceChildren(message);
+    if (version === renderVersion) showRenderError(container, "diagram", error);
   }
+}
+
+function showGraphic(container, svg, { alt, ...options }) {
+  const blob = new Blob([svg], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  imageUrls.push(url);
+  const image = new Image();
+  image.src = url;
+  image.alt = alt;
+  diagramBlobs.set(image, blob);
+  const controls = diagramExportControls({ image, svg, blob, ...options });
+  container.replaceChildren(image);
+  if (mode.value === "markdown") container.append(controls);
+  else standaloneExport.replaceChildren(controls);
+}
+
+function showRenderError(container, label, error) {
+  const message = document.createElement("p");
+  message.className = "diagram-error";
+  message.setAttribute("role", "alert");
+  message.textContent = `Could not render ${label}. ${error.message ?? String(error)}`;
+  container.replaceChildren(message);
 }
 
 async function render(version) {
   for (const url of imageUrls) URL.revokeObjectURL(url);
   imageUrls = [];
-  if (!source.value.trim()) {
-    preview.textContent = "Enter source to see a preview.";
+  const code = codeFormats[mode.value];
+  if (!(code ? source.value : source.value.trim())) {
+    preview.textContent = code ? `Enter text to generate a ${code.label}.` : "Enter source to see a preview.";
     return;
   }
-  if (mode.value === "mermaid") {
+  if (code) {
+    const container = document.createElement("div");
+    container.className = "diagram";
+    preview.replaceChildren(container);
+    try {
+      const svg = await code.render(source.value);
+      if (version !== renderVersion) return;
+      showGraphic(container, svg, { alt: code.label, filename: code.filename, label: `Export ${code.label}` });
+    } catch (error) {
+      if (version === renderVersion) showRenderError(container, code.label, error);
+    }
+  } else if (mode.value === "mermaid") {
     const container = document.createElement("div");
     container.className = "diagram";
     container.dataset.diagram = source.value;
@@ -192,11 +213,12 @@ function scheduleRender() {
 }
 
 function activeDraft() {
-  return mode.value === "mermaid" ? diagramType.value : "markdown";
+  return mode.value === "mermaid" ? diagramType.value : mode.value;
 }
 
 function showDraft() {
   diagramControls.hidden = mode.value !== "mermaid";
+  source.placeholder = codeFormats[mode.value]?.placeholder ?? "Paste Markdown or Mermaid source";
   source.value = drafts.get(activeDraft()) ?? "";
   scheduleRender();
 }
@@ -230,7 +252,7 @@ file.addEventListener("change", async () => {
   try {
     const content = await selected.text();
     if (content.length > maxSourceSize) throw new Error("Choose a file with 100,000 characters or fewer.");
-    mode.value = /\.(mmd|mermaid)$/i.test(selected.name) ? "mermaid" : "markdown";
+    if (!codeFormats[mode.value]) mode.value = /\.(mmd|mermaid)$/i.test(selected.name) ? "mermaid" : "markdown";
     if (mode.value === "mermaid") {
       if (!drafts.has("file")) diagramType.add(new Option("Opened diagram", "file"));
       diagramType.value = "file";

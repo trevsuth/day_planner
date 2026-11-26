@@ -27,16 +27,6 @@ export type SaveResult = {
 export interface StorageRepository {
   loadDocument(): GraphDocument;
   saveDocument(document: GraphDocument): SaveResult;
-  clearDocument(): void;
-  saveAttachment(file: File, attachment: AttachedFile): Promise<void>;
-  loadAttachment(attachment: AttachedFile): Promise<Blob | null>;
-  deleteAttachment(attachment: AttachedFile): Promise<void>;
-}
-
-export interface AsyncStorageRepository {
-  loadDocument(): Promise<GraphDocument>;
-  saveDocument(document: GraphDocument): Promise<SaveResult>;
-  clearDocument(): Promise<void>;
   saveAttachment(file: File, attachment: AttachedFile): Promise<void>;
   loadAttachment(attachment: AttachedFile): Promise<Blob | null>;
   deleteAttachment(attachment: AttachedFile): Promise<void>;
@@ -274,10 +264,6 @@ export class BrowserStorageRepository implements StorageRepository {
     return { savedAt };
   }
 
-  clearDocument(): void {
-    localStorage.removeItem(STORAGE_KEY);
-  }
-
   async saveAttachment(file: File, attachment: AttachedFile): Promise<void> {
     const key = getAttachmentStorageKey(attachment);
     if (!key) {
@@ -338,10 +324,6 @@ export function saveDocument(
   repository: StorageRepository = browserStorageRepository,
 ): SaveResult {
   return repository.saveDocument(document);
-}
-
-export function clearSavedDocument(repository: StorageRepository = browserStorageRepository): void {
-  repository.clearDocument();
 }
 
 export function saveAttachmentFile(

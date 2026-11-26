@@ -1,4 +1,4 @@
-# Markdown and Mermaid Viewer
+# Viewer
 
 Open **Viewer** from the web navigation or go to `/viewer/`. It starts in
 **Mermaid** with a rendered flowchart. Use **Diagram type** to load an editable
@@ -18,10 +18,17 @@ The viewer renders in the browser and does not upload or save your source.
 Raw HTML and external images are disabled in the preview. Keep your source in
 a local file if you want to use it again.
 
-## Export diagrams
+## Generate QR codes and barcodes
+
+Choose **QR Code** from **Format** and enter text or a URL up to 2,000 UTF-8
+bytes. Choose **Barcode (Code 128)** for up to 80 printable ASCII characters,
+such as an asset ID. Both formats generate live in the browser and preserve
+spaces in the input.
+
+## Export graphics
 
 Select **Download SVG** for a vector image or **Download PNG** for a raster
-image. Each rendered Mermaid diagram has its own controls, including diagrams
+image. Code previews and Mermaid diagrams have their own controls, including diagrams
 inside Markdown. Export runs in the browser and uses the rendered diagram's
 dimensions regardless of preview zoom. PNG exports use the preview background
 and are capped at 4,096 pixels on the longest side.
@@ -29,7 +36,7 @@ and are capped at 4,096 pixels on the longest side.
 ## Export or print a document
 
 Select **Download HTML** to save the rendered preview as a self-contained
-file. Mermaid diagrams are embedded and available offline. Other image
+file. Generated graphics are embedded and available offline. Other image
 references are replaced with their alt text. Open **Print preview** to print
 the rendered document or use your browser's **Save as PDF** destination.
 The editor and navigation controls are hidden in the print layout.

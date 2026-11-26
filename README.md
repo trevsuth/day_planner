@@ -1,7 +1,7 @@
 # Day Planner
 
 Day Planner is a personal productivity suite for daily planning, project
-management, graph notes, document previews, and text validation. The browser
+management, graph notes, document previews, text validation, and calculators. The browser
 app brings these tools together in one navigation bar. Planner and Projects
 also share their PostgreSQL data with the Textual terminal app.
 
@@ -49,12 +49,14 @@ and CSV imports.
 
 Arrange Markdown notes on a visual canvas, connect related ideas, and attach
 reference files. The [Graph guide](obsidian-arrow/README.md) covers the hosted
-workspace, standalone browser storage, and import and export.
+workspace, standalone browser storage, and import and export. Download the
+[interactive user guide as a Graph document](obsidian-arrow/public/user-guide.graph.json).
 
 ### Viewer
 
-Preview Markdown and Mermaid diagrams from pasted source or local files,
-export diagrams as SVG or PNG, and save or print the full preview.
+Preview Markdown and Mermaid diagrams from pasted source or local files.
+Generate QR codes and Code 128 barcodes from text. Download graphics as SVG or
+PNG, or save or print the full preview.
 The [Viewer guide](viewer/README.md) covers diagram presets, preview navigation,
 and the programmatic preview API.
 
@@ -67,6 +69,12 @@ dialects, including Snowflake and Google BigQuery, or compare JSON and YAML
 configurations side by side.
 The [Validation guide](docs/validation.md) includes examples and API and MCP
 request details.
+
+### Calculator
+
+Convert or calculate with binary, octal, decimal, and hexadecimal integers.
+Encode or decode Base64, calculate IPv4 or IPv6 ranges and address membership,
+and split a subnet into smaller networks. See the [Calculator guide](docs/calculator.md) for examples.
 
 ### Search
 

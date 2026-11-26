@@ -128,6 +128,9 @@ export default function Toolbar({
               </label>
               <button type="button" onClick={onBackup}>Export backup</button>
               <button type="button" onClick={onExport}>Export JSON</button>
+              <a className="file-button" href={`${import.meta.env.BASE_URL}user-guide.graph.json`} download onClick={closeDocumentActions}>
+                Download user guide
+              </a>
               {onBrowserBackup && <button type="button" onClick={onBrowserBackup}>Export old browser graph</button>}
             </div>
           </details>

@@ -36,7 +36,7 @@ export function enablePreviewNavigation(viewport, content, mode) {
   zoomOut.addEventListener("click", () => setZoom(zoom / zoomStep));
   document.querySelector("#preview-fit").addEventListener("click", () => {
     setZoom(1, 0, 0);
-    if (mode.value === "mermaid" && content.querySelector(".diagram img")) {
+    if (mode.value !== "markdown" && content.querySelector(".diagram img")) {
       setZoom(Math.min(1, viewport.clientHeight / content.offsetHeight), 0, 0);
     }
     viewport.scrollTo(0, 0);

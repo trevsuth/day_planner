@@ -42,11 +42,13 @@ Keep the application lightweight in day-to-day use:
    - Move markdown/Mermaid preview helpers out of `web/src/projects/ProjectsApp.jsx`.
    - Add focused tests for escaping, headings, lists, and fenced code blocks.
 
+6. Expand Graph test coverage
+   - Cover graph operations, search, document migrations, and import/export.
+   - Exercise dragging, linked-node creation, multi-selection, copy/paste, and deletion.
+   - Check keyboard and accessible labels for toolbar and inspector controls.
+
 ## Later
 
-1. Add a reference-notes repository for projects and cards
-   - Start with linked notes rather than a full wiki or document-management system.
-
-2. Add structured application settings
+1. Add structured application settings
    - Configure CORS and frontend hostnames only when non-local deployments require it.
    - Keep deployment-specific settings in environment configuration.

@@ -1,0 +1,719 @@
+{
+  "schemaVersion": 1,
+  "id": "day-planner-user-guide",
+  "title": "Day Planner User Guide",
+  "createdAt": "2026-11-22T00:00:00Z",
+  "updatedAt": "2026-11-26T00:00:00Z",
+  "nodes": [
+    {
+      "id": "start",
+      "title": "Start Here",
+      "x": 720,
+      "y": 530,
+      "labels": [
+        "Start"
+      ],
+      "tags": [
+        "overview",
+        "help"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "# Day Planner user's guide\n\nUse the graph as a map. Select a node to read its note, follow the links below to related topics, or use Graph search to find a term. **Fit** shows the whole guide.\n\n- [[Quickstart]] gets the suite running.\n- [[Planner]], [[Projects]], and [[Graph]] help you plan and capture work.\n- [[Viewer]] and [[Validation]] handle documents, diagrams, and data. [[Calculator]] covers numbers, Base64, and subnets.\n- [[Suite Search]] jumps to existing work. [[REST API]] and [[MCP]] cover automation.\n- [[k3s Deployment]] and [[Backup and Restore]] cover the home-lab installation.\n\nIf you want to try a complete workflow, start with [[Graph Runbooks]].",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 79,
+        "fill": "#293148",
+        "stroke": "#a6b7ff",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "quickstart",
+      "title": "Quickstart",
+      "x": 720,
+      "y": 305,
+      "labels": [
+        "Start"
+      ],
+      "tags": [
+        "compose",
+        "setup",
+        "docker"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Run the suite locally\n\nFrom the repository root, start Docker and run either command:\n\n```bash\njust host-start\n# Or directly with Compose\ndocker compose up --build -d\n```\n\nOpen `http://localhost:8080`. Compose starts PostgreSQL, migrates the schema, and brings up the web app and API. Set `DAILY_PLANNER_PORT` in `.env` if you need a different port. `just host-down` or `docker compose down` stops the stack and keeps its database volume.\n\nNext, open [[Planner]] or [[Projects]]. For a cluster installation, see [[k3s Deployment]].",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#293148",
+        "stroke": "#a6b7ff",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "planner",
+      "title": "Planner",
+      "x": 365,
+      "y": 360,
+      "labels": [
+        "Daily work"
+      ],
+      "tags": [
+        "schedule",
+        "priorities",
+        "tasks"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Plan a day\n\nChoose a date, jot down the schedule, set up to three priorities, and add tasks and notes. Select **Save** in the browser. Use the date picker or arrows to revisit a day.\n\nTo bring work into your day, open a card in [[Projects]] and assign it to a Planner priority. The linked priority opens the source card. Moving the assignment to another date moves the link.\n\nUse [[Suite Search]] to find a saved schedule, task, priority, or note. The Textual app shares the same PostgreSQL data and can be started with `just tui` after PostgreSQL is running.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#10332e",
+        "stroke": "#73efba",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "projects",
+      "title": "Projects",
+      "x": 337,
+      "y": 555,
+      "labels": [
+        "Daily work"
+      ],
+      "tags": [
+        "cards",
+        "kanban",
+        "gantt",
+        "csv"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Organize project work\n\nCreate a project and add epics, features, stories, and subtasks. Drag cards on the board to update status, or review dates and dependencies in the Gantt, calendar, timeline, or roadmap. Use **Cards CSV** to export cards or prepare an import.\n\nA card can be assigned to a priority in [[Planner]]. For repeatable work, use [[Card Templates]], then link a procedure from [[Graph Runbooks]].",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#10332e",
+        "stroke": "#73efba",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "graph",
+      "title": "Graph",
+      "x": 355,
+      "y": 775,
+      "labels": [
+        "Daily work"
+      ],
+      "tags": [
+        "notes",
+        "wiki",
+        "attachments"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Build a knowledge graph\n\nCreate a node for each note, add Markdown and attachments, and link related nodes with directed relationships. Wiki links such as the one to [[Graph Runbooks]] jump to the linked note. Use tags, labels, and Graph search to find notes. **Fit** resets the canvas to the full graph.\n\nThe hosted workspace autosaves to PostgreSQL. **Document** offers JSON export and a portable backup that includes attachment files. Import replaces the open graph, so export a backup before importing into a workspace you want to keep.\n\nSee [[Backup and Restore]] for a database-level copy and [[Suite Search]] for looking across modules.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#10332e",
+        "stroke": "#73efba",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "templates",
+      "title": "Card Templates",
+      "x": 105,
+      "y": 445,
+      "labels": [
+        "Daily work"
+      ],
+      "tags": [
+        "checklist",
+        "maintenance"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Start a maintenance card\n\nCreate a new card in [[Projects]], choose **Service upgrade**, **Restore rehearsal**, or **Incident follow-up**, then select **Apply template**. The template fills blank title and description fields and adds deliverables.\n\nFor a service upgrade, review the rollback steps, verify the backup, apply the update, and run smoke checks. Add the runbook through [[Graph Runbooks]] and assign a dated priority in [[Planner]] when the work is scheduled.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#10332e",
+        "stroke": "#73efba",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "runbooks",
+      "title": "Graph Runbooks",
+      "x": 105,
+      "y": 690,
+      "labels": [
+        "Daily work"
+      ],
+      "tags": [
+        "maintenance",
+        "procedures"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Keep a runbook beside its task\n\n1. Write the procedure in [[Graph]]. Record prerequisites, commands, checks, and a rollback point.\n2. Open the relevant card in [[Projects]], select **Choose a Graph note**, and save the card.\n3. Select **Open Graph runbook** from the card editor or preview when doing the work.\n\nExample: use [[Card Templates]] to create a restore rehearsal, link the procedure, and work through [[Backup and Restore]]. If a Graph note is removed, clear or replace the link in the card editor.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#10332e",
+        "stroke": "#73efba",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "search",
+      "title": "Suite Search",
+      "x": 720,
+      "y": 110,
+      "labels": [
+        "Start"
+      ],
+      "tags": [
+        "find",
+        "navigation",
+        "shortcuts"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Find saved work\n\nOpen **Search** or press `Ctrl+Shift+K` / `Cmd+Shift+K`. Enter at least two characters. Results show the matched module and a text excerpt.\n\n- [[Planner]] results open the dated entry.\n- [[Projects]] results open the card preview.\n- [[Graph]] results select the matching node.\n\nSearch finds case-insensitive phrases in the hosted suite. Programmatic clients can use [[REST API]] or [[MCP]].",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#293148",
+        "stroke": "#a6b7ff",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "viewer",
+      "title": "Viewer",
+      "x": 1105,
+      "y": 312,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "markdown",
+        "mermaid",
+        "export"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Preview and export documents\n\nPaste Markdown or Mermaid source, open a UTF-8 file, or load a Mermaid preset. Use fenced `mermaid` blocks in Markdown to mix notes and diagrams. Switch modes to keep separate drafts in the current tab.\n\nChoose **QR Code** to encode text or a URL, or **Barcode (Code 128)** for printable ASCII asset IDs. Download generated codes and individual diagrams as SVG or PNG. **Download HTML** bundles the rendered preview and generated graphics for offline use. **Print preview** opens the browser's print dialog, including its Save as PDF option.\n\nCheck pasted configuration data in [[Validation]] before including it in a runbook. Programmatic Markdown previews are available through [[REST API]] and [[MCP]].",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "validation",
+      "title": "Validation",
+      "x": 1090,
+      "y": 565,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "format",
+        "regex",
+        "unicode"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Inspect and transform text\n\n- **Validate & Format** checks JSON, XML, YAML, and TOML. Review line and column diagnostics, then copy or download the formatted output.\n- **Invisible Characters** marks suspicious code points and previews removal of selected characters.\n- **Regex Playground** highlights matches and capture groups. Python is the default and JavaScript runs in a browser worker.\n\nUse [[SQL Tools]] for dialect changes, [[Schema Checks]] for structure, and [[Config Diff]] to review before and after files.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "sql",
+      "title": "SQL Tools",
+      "x": 1360,
+      "y": 405,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "snowflake",
+        "bigquery",
+        "translation"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Format or translate SQL\n\nChoose **SQL Translate & Format** in [[Validation]], then select the source dialect. **Format SQL** keeps that dialect. **Translate SQL** uses the target selector and shows both versions side by side.\n\nSupported dialects are PostgreSQL, SQLite, DuckDB, MySQL, Snowflake, and Google BigQuery. The tool processes SQL as text. Review diagnostics and compatibility warnings before using the output in your database.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "schema",
+      "title": "Schema Checks",
+      "x": 1360,
+      "y": 580,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "json schema",
+        "xml",
+        "xsd"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Check structure and types\n\nOpen **JSON Schema** in [[Validation]] for Draft 2020-12, or **XML Schema** for a self-contained XSD 1.0 schema. Paste or open the document and schema, then select **Check against schema**.\n\nIssues identify which input failed and its path, with line and column when available. Keep references within the provided schema. For XML and XSD, use documents without DTDs or external schema imports.\n\nUse [[Config Diff]] to review changes after fixing the document.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "diff",
+      "title": "Config Diff",
+      "x": 1360,
+      "y": 765,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "yaml",
+        "json",
+        "comparison"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Compare configurations\n\nOpen **Config Diff** in [[Validation]], choose JSON or YAML, and paste or open a Before and After file. **Compare configs** formats both inputs and aligns the lines. **Hide unchanged lines** focuses the view on the differences.\n\nFormatting removes spacing noise. Key order and comments can still show as changes. Use [[Schema Checks]] if you also need to verify structure before applying a config.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "api",
+      "title": "REST API",
+      "x": 954,
+      "y": 109,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "openapi",
+        "http",
+        "automation"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Use Day Planner from scripts\n\nOpen **API** for the in-app reference, `/docs` for interactive OpenAPI, or `/openapi.json` for the schema. Use the same base URL as your Day Planner deployment.\n\n- Get a Planner day at `/api/planner/entries/YYYY-MM-DD`.\n- Find saved work at `/api/search?q=term`.\n- Read Graph at `/api/graphs/workspace`. A save uses the current revision.\n- Preview Markdown at `POST /api/viewer/preview`.\n- Find document checks and transforms under `/api/validation/`.\n\nFor a tool-oriented interface, see [[MCP]].",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "mcp",
+      "title": "MCP",
+      "x": 1165,
+      "y": 108,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "llm",
+        "stdio",
+        "automation"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Connect a local tool client\n\nRun the MCP server from the repository root:\n\n```bash\nuv run --locked --no-default-groups -m app_planner.mcp_server\n```\n\nThe default transport is stdio. Use `--http-port 8765` for local Streamable HTTP at `http://127.0.0.1:8765/mcp`. The server uses the configured PostgreSQL database and exposes read-only tools by default. Set `DAY_PLANNER_MCP_WRITES=1` to enable creating project cards and assigning Planner priorities.\n\nUse [[Suite Search]] for discovery, or see [[REST API]] for direct HTTP requests.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "k3s",
+      "title": "k3s Deployment",
+      "x": 635,
+      "y": 790,
+      "labels": [
+        "Home lab"
+      ],
+      "tags": [
+        "kubernetes",
+        "kustomize",
+        "deployment"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Deploy to the home lab\n\nUse the matching source release and the published web and API image digests. Copy the example Kustomize overlay to `deploy/k3s-overlays/local`, set the ingress hostname and images, and choose the intended `kubectl` context.\n\nUse the documented `just k3s-init-db`, `just k3s-preflight`, `just k3s-apply`, and `just k3s-smoke` workflow. The migration Job gates application rollout. Before upgrading an existing installation, rehearse [[Backup and Restore]] and keep the previous release settings.\n\nUse [[Quickstart]] for a local trial before deploying.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#3b2b16",
+        "stroke": "#ffd47c",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "backup",
+      "title": "Backup and Restore",
+      "x": 820,
+      "y": 820,
+      "labels": [
+        "Home lab"
+      ],
+      "tags": [
+        "recovery",
+        "postgresql",
+        "operations"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Keep a recoverable copy\n\nThe k3s CronJob writes a nightly PostgreSQL dump. Keep a second copy on a different machine and monitor its freshness. A full PostgreSQL dump contains Planner entries, Projects cards, the hosted Graph, and attachment bytes.\n\nRehearse restoration in a disposable database. Verify that a Planner entry, a project card, a Graph node, and an attachment come back before relying on the backup for an upgrade. A successful backup run alone only confirms the archive was created.\n\nUse the **Restore rehearsal** preset in [[Card Templates]] and link this note using [[Graph Runbooks]]. See [[k3s Deployment]] for rollout context.",
+        "updatedAt": "2026-11-22T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#3b2b16",
+        "stroke": "#ffd47c",
+        "textColor": "#e5fbff"
+      }
+    },
+    {
+      "id": "calculator",
+      "title": "Calculator",
+      "x": 1090,
+      "y": 810,
+      "labels": [
+        "Tools"
+      ],
+      "tags": [
+        "numbers",
+        "base64",
+        "subnets"
+      ],
+      "content": {
+        "type": "article",
+        "markdown": "## Work with numbers, bytes, and subnets\n\nOpen **Calculator** to convert signed integers between binary, octal, decimal, and hex. Select an operation to calculate with values in different bases. **Base64** supports UTF-8 text, raw hex bytes, and URL-safe output. **IP Subnet** accepts IPv4 or IPv6 CIDR notation and can check whether an address belongs to the subnet. **Split a subnet** divides a parent CIDR into equal child networks. Use the page field for large splits.\n\nUse [[Validation]] to check configuration text that contains the result.",
+        "updatedAt": "2026-11-26T00:00:00Z"
+      },
+      "attachments": [],
+      "style": {
+        "radius": 65,
+        "fill": "#152f43",
+        "stroke": "#5bd2ea",
+        "textColor": "#e5fbff"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "id": "start-quickstart",
+      "fromNodeId": "start",
+      "toNodeId": "quickstart",
+      "type": "start with",
+      "properties": {},
+      "style": {
+        "stroke": "#a6b7ff",
+        "width": 2
+      }
+    },
+    {
+      "id": "start-planner",
+      "fromNodeId": "start",
+      "toNodeId": "planner",
+      "type": "plan",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "start-projects",
+      "fromNodeId": "start",
+      "toNodeId": "projects",
+      "type": "organize",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "start-graph",
+      "fromNodeId": "start",
+      "toNodeId": "graph",
+      "type": "document",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "start-viewer",
+      "fromNodeId": "start",
+      "toNodeId": "viewer",
+      "type": "preview",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "start-validation",
+      "fromNodeId": "start",
+      "toNodeId": "validation",
+      "type": "check",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "start-k3s",
+      "fromNodeId": "start",
+      "toNodeId": "k3s",
+      "type": "deploy",
+      "properties": {},
+      "style": {
+        "stroke": "#ffd47c",
+        "width": 2
+      }
+    },
+    {
+      "id": "start-backup",
+      "fromNodeId": "start",
+      "toNodeId": "backup",
+      "type": "recover",
+      "properties": {},
+      "style": {
+        "stroke": "#ffd47c",
+        "width": 2
+      }
+    },
+    {
+      "id": "quickstart-search",
+      "fromNodeId": "quickstart",
+      "toNodeId": "search",
+      "type": "find tools",
+      "properties": {},
+      "style": {
+        "stroke": "#a6b7ff",
+        "width": 2
+      }
+    },
+    {
+      "id": "search-api",
+      "fromNodeId": "search",
+      "toNodeId": "api",
+      "type": "automate",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "api-mcp",
+      "fromNodeId": "api",
+      "toNodeId": "mcp",
+      "type": "tool access",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "planner-projects",
+      "fromNodeId": "planner",
+      "toNodeId": "projects",
+      "type": "links priorities",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "projects-templates",
+      "fromNodeId": "projects",
+      "toNodeId": "templates",
+      "type": "uses",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "projects-runbooks",
+      "fromNodeId": "projects",
+      "toNodeId": "runbooks",
+      "type": "links notes",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "runbooks-graph",
+      "fromNodeId": "runbooks",
+      "toNodeId": "graph",
+      "type": "stored in",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "templates-runbooks",
+      "fromNodeId": "templates",
+      "toNodeId": "runbooks",
+      "type": "attach procedure",
+      "properties": {},
+      "style": {
+        "stroke": "#73efba",
+        "width": 2
+      }
+    },
+    {
+      "id": "validation-sql",
+      "fromNodeId": "validation",
+      "toNodeId": "sql",
+      "type": "translates",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "validation-schema",
+      "fromNodeId": "validation",
+      "toNodeId": "schema",
+      "type": "validates structure",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "validation-diff",
+      "fromNodeId": "validation",
+      "toNodeId": "diff",
+      "type": "compares",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "schema-diff",
+      "fromNodeId": "schema",
+      "toNodeId": "diff",
+      "type": "review changes",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    },
+    {
+      "id": "k3s-backup",
+      "fromNodeId": "k3s",
+      "toNodeId": "backup",
+      "type": "protect data",
+      "properties": {},
+      "style": {
+        "stroke": "#ffd47c",
+        "width": 2
+      }
+    },
+    {
+      "id": "validation-calculator",
+      "fromNodeId": "validation",
+      "toNodeId": "calculator",
+      "type": "uses calculated values",
+      "properties": {},
+      "style": {
+        "stroke": "#5bd2ea",
+        "width": 2
+      }
+    }
+  ]
+}

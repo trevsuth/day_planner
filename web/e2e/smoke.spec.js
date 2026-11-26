@@ -449,6 +449,7 @@ test("shows the same module selector in every hosted view", async ({ page }) => 
     ["Graph", "/graph/"],
     ["Viewer", "/viewer/"],
     ["Validation", "/?view=validation"],
+    ["Calculator", "/?view=calculator"],
     ["Search", "/?view=search"],
     ["API", "/?view=api"],
   ]);
@@ -609,4 +610,96 @@ test("compares formatted configs and exports a printable offline Viewer document
   await expect(page.getByRole("navigation", { name: "Application views" })).toBeHidden();
   await expect(page.locator("#source-pane")).toBeHidden();
   await expect(page.locator("#preview").getByRole("heading", { name: "Lab runbook" })).toBeVisible();
+});
+
+test("downloads and imports the linked user guide graph", async ({ page, request }) => {
+  await page.goto("/graph/");
+  const before = await (await request.get("/api/graphs/workspace")).json();
+  const downloadEvent = page.waitForEvent("download");
+  await page.locator(".document-actions summary").click();
+  await page.getByRole("link", { name: "Download user guide" }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe("user-guide.graph.json");
+  const bytes = await readFile(await download.path());
+  const guide = JSON.parse(bytes.toString());
+  expect(guide.title).toBe("Day Planner User Guide");
+  expect((await (await request.get("/api/graphs/workspace")).json()).revision).toBe(before.revision);
+
+  await page.locator(".document-actions summary").click();
+  await page.getByLabel("Import JSON").setInputFiles({
+    name: download.suggestedFilename(),
+    mimeType: "application/json",
+    buffer: bytes,
+  });
+  await expect(page.getByRole("heading", { name: "Day Planner User Guide" })).toBeVisible();
+  await expect(page.locator(".graph-node")).toHaveCount(guide.nodes.length);
+  await page.getByRole("button", { name: "Fit", exact: true }).click();
+  await page.locator(".graph-node").filter({ hasText: "Start Here" }).locator("circle").first().click();
+  const note = page.locator(".markdown-preview");
+  await expect(note.getByRole("heading", { name: /Day Planner user.s guide/ })).toBeVisible();
+  await note.getByRole("link", { name: "Quickstart", exact: true }).click();
+  await expect(note.getByRole("heading", { name: "Run the suite locally" })).toBeVisible();
+});
+
+test("uses the Calculator for bases, Base64, and IP subnets", async ({ page }) => {
+  await page.goto("/?view=calculator");
+  const tool = () => page.locator(".validation-tool:visible");
+  await tool().getByLabel("Integer", { exact: true }).fill("0xFF");
+  await tool().getByLabel("Input base").selectOption("16");
+  await tool().getByRole("button", { name: "Convert bases" }).click();
+  await expect(tool().getByText("11111111", { exact: true })).toBeVisible();
+  await expect(tool().getByText("255", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Base64", exact: true }).click();
+  await tool().getByLabel("Base64 tool input").fill("Lab");
+  await tool().getByRole("button", { name: "Convert Base64" }).click();
+  await expect(tool().getByLabel("Base64 tool output")).toHaveValue("TGFi");
+
+  await page.getByRole("button", { name: "IP Subnet", exact: true }).click();
+  await tool().getByLabel("Address and CIDR prefix").fill("2001:db8::1/64");
+  await tool().getByLabel("Check address membership").fill("2001:db8::50");
+  await tool().getByRole("button", { name: "Calculate subnet" }).click();
+  await expect(tool().getByText("2001:db8::/64", { exact: true })).toBeVisible();
+  await expect(tool().getByText("2001:db8::50 is inside the subnet")).toBeVisible();
+});
+
+test("splits a subnet and opens a later page", async ({ page }) => {
+  await page.goto("/?view=calculator");
+  await page.getByRole("button", { name: "IP Subnet" }).click();
+  await page.getByLabel("Parent subnet").fill("10.0.0.9/16");
+  await page.getByLabel("Child prefix").fill("/24");
+  await page.getByLabel("Page", { exact: true }).fill("2");
+  await page.getByRole("button", { name: "Split subnet" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Page 2 of 2" })).toContainText("256 subnets");
+  await expect(page.getByLabel("Child subnets")).toHaveValue(/^10\.0\.128\.0\/24[\s\S]*10\.0\.255\.0\/24$/);
+});
+
+test("generates QR and barcode images and downloads them", async ({ page }) => {
+  await page.goto("/viewer/");
+  const format = page.getByLabel("Format");
+  const source = page.getByLabel("Source", { exact: true });
+  await format.selectOption("qr");
+  await source.fill("Lab café");
+  const qr = page.getByRole("img", { name: "QR code" });
+  await expect.poll(() => qr.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  const [svg] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download SVG" }).click(),
+  ]);
+  expect(svg.suggestedFilename()).toBe("qr-code.svg");
+  expect(await readFile(await svg.path(), "utf8")).toContain("<svg");
+  await format.selectOption("barcode");
+  await source.fill("hello 🌍");
+  await expect(page.getByRole("alert").filter({ hasText: "printable ASCII" })).toBeVisible();
+  await source.fill("LAB-42 <&>");
+  const barcode = page.getByRole("img", { name: "Code 128 barcode" });
+  await expect.poll(() => barcode.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  const [png] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Download PNG" }).click(),
+  ]);
+  expect(png.suggestedFilename()).toBe("barcode.png");
+  expect((await readFile(await png.path())).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+  await format.selectOption("qr");
+  await expect(source).toHaveValue("Lab café");
 });
