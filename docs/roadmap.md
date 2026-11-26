@@ -1,54 +1,52 @@
 # Roadmap
 
-## Product Direction
-
-Keep the application lightweight in day-to-day use:
-
-- Keep Planner focused on daily capture and scheduling.
-- Prefer reliable local data over additional views.
-- Keep infrequent administration behind compact drawers, panels, or command recipes.
-- Add new concepts only when they reduce repeated manual work in both the web app and TUI.
-- Do not maintain completed work in this file; completed changes are recorded in git history.
+Priorities for a personal, single-node home lab. Keep Planner focused on daily
+capture and scheduling. Use Projects for repeatable work and Graph for runbooks.
+Prefer improvements that save time or make recovery easier within the existing
+deployment.
 
 ## Next
 
-1. Improve import validation and reporting
-   - Show row-level CSV validation failures before import.
-   - Keep successful imports atomic so partial files do not leave confusing state.
+1. **Make Projects CSV imports safe to retry.** The browser currently creates
+   cards and links dependencies in separate requests. Preview row-level errors
+   for malformed fields, unresolved references, and ambiguous matches before
+   saving. Commit the batch in one database transaction. Test that an invalid
+   row or failed write leaves the project untouched.
+2. **Make off-device restore rehearsals repeatable.** Use the documented
+   [restore procedure](../deploy/k3s/README.md) against a recent off-device
+   archive in disposable PostgreSQL. Record the archive, release, and result
+   after checking a Planner entry, a project card, and a Graph attachment.
+   Consider a Just recipe if repeated drills make the setup worthwhile.
 
-## Refactoring
+## After that
 
-1. Continue splitting React project UI components by feature
-   - Move project management views into `web/src/projects/views/`.
-   - Move card editor, project editor, CSV panel, and shared project controls into `web/src/projects/`.
-   - Keep changes mechanical and behavior-preserving.
+- **Flag overlapping CIDRs in Calculator.** Paste a list of IPv4 and IPv6
+  networks and highlight duplicates, contained networks, and invalid lines.
+  Keep parsing and results in the browser. This supports checking VLAN, VPN,
+  and container network plans before changing configuration.
+- **Explain SQL translation limits in Validation.** Show which statements use
+  constructs the translator cannot convert faithfully. Use Snowflake and
+  BigQuery examples that distinguish translation warnings from syntax errors.
+- **Print QR and barcode labels from Viewer.** Add an optional human-readable
+  caption and a print size in millimeters. Preserve the code's quiet zone and
+  verify a printed sample at the selected size before extending the layout.
+- **Check linked runbooks in Projects.** Flag a card whose Graph note was
+  removed or replaced during import. From the card, make it easy to relink
+  the note or clear the reference.
 
-2. Convert scheduling and card hierarchy domain logic to TypeScript
-   - Convert `web/src/domain/cards.js` once tests cover more edge cases.
-   - Preserve Node unit tests or convert them alongside the module.
-   - Keep React components in JSX until feature modules are smaller.
+## Maintenance when touching the feature
 
-3. Use server-side issue records more broadly
-   - Feed server issue records into issue badges, preview panels, and dependency graph warnings.
-   - Keep local issue helpers only as a fallback for optimistic UI updates.
-   - Add an API smoke assertion for `/api/projmgmt/projects/{project_id}/issues`.
-
-4. Add service-level tests around API/TUI interoperability
-   - Cover TUI-facing project card creation/update service calls.
-   - Cover planner assignment behavior after project card deletion.
-   - Keep database tests separate from service behavior tests.
-
-5. Consider extracting markdown rendering
-   - Move markdown/Mermaid preview helpers out of `web/src/projects/ProjectsApp.jsx`.
-   - Add focused tests for escaping, headings, lists, and fenced code blocks.
-
-6. Expand Graph test coverage
-   - Cover graph operations, search, document migrations, and import/export.
-   - Exercise dragging, linked-node creation, multi-selection, copy/paste, and deletion.
-   - Check keyboard and accessible labels for toolbar and inspector controls.
-
-## Later
-
-1. Add structured application settings
-   - Configure CORS and frontend hostnames only when non-local deployments require it.
-   - Keep deployment-specific settings in environment configuration.
+- **Keep project warnings consistent.** The Issues panel already loads server
+  issue records. Extend that source to the card preview, badges, and dependency
+  graph. Treat a successful empty response as authoritative, and exercise
+  the issues API in a browser test.
+- **Cover shared project behavior.** Add service tests for card creation and
+  updates used by the API and TUI, and for what happens to a Planner assignment
+  when its linked card is deleted.
+- **Extract project UI by workflow.** Move the CSV panel or card editor when
+  changes to that workflow make extraction useful. Add tests for escaping,
+  lists, and fenced blocks if the card Markdown preview moves. Revisit typing
+  the scheduling helpers when changing their interfaces or rules.
+- **Add focused Graph interaction tests.** Build on existing search and
+  portable backup coverage with multi-selection, copy/paste, and keyboard
+  behavior. Add migration fixtures when changing the document format.
