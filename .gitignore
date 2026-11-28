@@ -11,6 +11,7 @@ web/playwright-report/
 web/test-results/
 web/browser-coverage/
 /.coverage
+/.coverage.*
 /coverage.xml
 /web-lcov.info
 /.scannerwork/

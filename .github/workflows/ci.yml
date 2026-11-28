@@ -78,6 +78,7 @@ jobs:
       - name: Run Python tests
         run: |
           uv run --locked --no-build coverage run -m pytest
+          uv run --locked --no-build coverage combine
           uv run --locked --no-build coverage xml
 
       - name: Build frontend
