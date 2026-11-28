@@ -45,6 +45,7 @@ pythonpath = [
 
 [tool.coverage.run]
 branch = true
+patch = ["subprocess"]
 relative_files = true
 source = ["."]
 

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const collectCoverage = Boolean(process.env.PLAYWRIGHT_COVERAGE);
+const buildOptions = collectCoverage ? " -- --sourcemap" : "";
 const databaseSchema = `playwright_${process.pid}`;
 const databaseUrl =
   process.env.TEST_DATABASE_URL ||
@@ -11,7 +13,7 @@ export default defineConfig({
   outputDir: "./test-results",
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
-  reporter: "line",
+  reporter: collectCoverage ? [["line"], ["./e2e/coverage-reporter.js"]] : "line",
   use: {
     baseURL: "http://127.0.0.1:8180",
     trace: "on-first-retry",
@@ -24,7 +26,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run build && npm --prefix ../obsidian-arrow run build:hosted && npm --prefix ../viewer run build && uv run --directory .. python -m app_planner.migrate && uv run --project .. uvicorn app_planner.api:app --app-dir .. --host 127.0.0.1 --port 8180",
+    command: `npm run build${buildOptions} && npm --prefix ../obsidian-arrow run build:hosted${buildOptions} && npm --prefix ../viewer run build${buildOptions} && uv run --directory .. python -m app_planner.migrate && uv run --project .. uvicorn app_planner.api:app --app-dir .. --host 127.0.0.1 --port 8180`,
     env: {
       ...process.env,
       DATABASE_URL: databaseUrl,

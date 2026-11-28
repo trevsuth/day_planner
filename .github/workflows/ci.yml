@@ -78,6 +78,7 @@ jobs:
       - name: Run Python tests
         run: |
           uv run --locked --no-build coverage run -m pytest
+          uv run --locked --no-build coverage combine
           uv run --locked --no-build coverage xml
 
       - name: Build frontend
@@ -86,14 +87,16 @@ jobs:
       - name: Typecheck frontend
         run: npm --prefix web run typecheck
 
-      - name: Run frontend unit tests
+      - name: Run frontend and Graph unit tests
         run: |
           node --experimental-strip-types --experimental-test-coverage \
             --test-reporter=spec --test-reporter=lcov \
             --test-reporter-destination=stdout --test-reporter-destination=web-lcov.info \
-            --test web/src/domain/*.test.js web/src/domain/*.test.ts
+            --test web/src/domain/*.test.js web/src/domain/*.test.ts obsidian-arrow/src/lib/*.test.js
 
       - name: Run browser smoke tests
+        env:
+          PLAYWRIGHT_COVERAGE: "1"
         run: npm --prefix web run test:e2e
 
       - name: Analyze with SonarQube Cloud
