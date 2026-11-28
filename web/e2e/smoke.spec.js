@@ -1,4 +1,5 @@
-import { expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { test } from "./coverage-fixture.js";
 import { readFile } from "node:fs/promises";
 
 test("opens the Viewer and renders Markdown, Mermaid files, and diagram errors", async ({ page }) => {
@@ -702,4 +703,56 @@ test("generates QR and barcode images and downloads them", async ({ page }) => {
   expect((await readFile(await png.path())).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
   await format.selectOption("qr");
   await expect(source).toHaveValue("Lab café");
+});
+
+test("keeps project dependencies and milestones consistent across views", async ({ page, request }) => {
+  const projectName = "Coverage release";
+  await page.goto("/");
+  await openProjects(page);
+  const project = await createProject(page, projectName);
+  const contract = await createCard(request, {
+    project_id: project.id,
+    card_type: "epic",
+    title: "Approve contract",
+    status: "blocked",
+    due_date: "2030-06-15",
+  });
+  await createCard(request, {
+    project_id: project.id,
+    card_type: "epic",
+    title: "Start implementation",
+    status: "backlog",
+    start_date: "2030-06-10",
+    dependency_ids: [contract.id],
+  });
+
+  await page.reload();
+  const views = page.getByRole("navigation", { name: "Project management views" });
+
+  await views.getByRole("button", { name: "Issues" }).click();
+  await expect(page.getByText(/Depends on blocked card "Approve contract"/).first()).toBeVisible();
+
+  await views.getByRole("button", { name: "Graph", exact: true }).click();
+  await expect(page.getByRole("heading", { name: `${projectName} Dependency Graph` })).toBeVisible();
+  const edge = page.locator(".dependency-edge");
+  await expect(edge.getByRole("button", { name: /Approve contract/ })).toBeVisible();
+  await expect(edge.getByRole("button", { name: /Start implementation/ })).toBeVisible();
+
+  await views.getByRole("button", { name: "Roadmap" }).click();
+  await expect(page.getByRole("heading", { name: `${projectName} Roadmap` })).toBeVisible();
+  await expect(page.getByText("Start implementation", { exact: true })).toBeVisible();
+
+  await views.getByRole("button", { name: "Timeline" }).click();
+  const milestones = page.locator(".timeline-row");
+  await expect(milestones).toHaveCount(2);
+  await expect(milestones.first()).toContainText("2030-06-10");
+  await expect(milestones.last()).toContainText("2030-06-15");
+
+  await views.getByRole("button", { name: "Calendar" }).click();
+  await expect(page.getByRole("heading", { name: `${projectName} Calendar` })).toBeVisible();
+  await expect(page.locator(".calendar-card")).toHaveCount(2);
+
+  await views.getByRole("button", { name: "Board" }).click();
+  await expect(page.getByText("Approve contract", { exact: true })).toBeVisible();
+  await expect(page.getByText("Start implementation", { exact: true })).toBeVisible();
 });
