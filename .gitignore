@@ -9,6 +9,10 @@ node_modules/
 web/dist/
 web/playwright-report/
 web/test-results/
+/.coverage
+/coverage.xml
+/web-lcov.info
+/.scannerwork/
 daily-planner-backup.json
 deploy/k3s-overlays/local/
 
